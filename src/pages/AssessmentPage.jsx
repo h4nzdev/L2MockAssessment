@@ -318,7 +318,7 @@ export default function AssessmentPage() {
             <img
               src={ssquelLogo}
               alt="SSEQUEL Logo"
-              className="w-5 h-5 rounded-md object-contain bg-blue-600 p-0.5"
+              className="w-5 h-5 rounded-md object-contain"
             />
             <span className="font-bold theme-text tracking-tight hidden md:inline">SSEQUEL</span>
             <ArrowLeft className="w-3.5 h-3.5 ml-0.5" />
