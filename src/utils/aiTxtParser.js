@@ -3,6 +3,7 @@
  * Synchronizes custom mock database schemas (CREATE TABLE / INSERT) with 10 questions.
  */
 import alasql from 'alasql';
+import { ensureAlaSqlDatabase } from '../data/mockDatabase';
 
 export const DOMAIN_PRESETS = [
   {
@@ -266,6 +267,184 @@ Rules:
 }
 
 /**
+ * Parses, validates, and extracts schema metadata from raw SQL (CREATE TABLE / INSERT)
+ */
+export function parseSqlSchemaOnly(rawSql) {
+  if (!rawSql || !rawSql.trim()) {
+    return { success: false, error: 'SQL input is empty.' };
+  }
+
+  try {
+    ensureAlaSqlDatabase();
+    
+    // Clean and extract statements
+    const cleanSql = rawSql
+      .replace(/--.*$/gm, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+
+    const statements = cleanSql
+      .split(';')
+      .map(s => s.trim())
+      .filter(s => s.length > 5);
+
+    if (statements.length === 0) {
+      return { success: false, error: 'No valid SQL statements found.' };
+    }
+
+    let createdTables = [];
+    statements.forEach(stmt => {
+      try {
+        alasql(stmt + ';');
+        const match = stmt.match(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z0-9_]+)/i);
+        if (match && match[1]) {
+          createdTables.push(match[1]);
+        }
+      } catch (stmtErr) {
+        console.warn('SQL Parse warning on statement:', stmt, stmtErr.message);
+      }
+    });
+
+    alasql.useid = 'alasql';
+
+    // Discovered tables
+    const allTables = Object.keys(alasql.tables || {}).filter(t => !t.startsWith('_'));
+    const targetTables = createdTables.length > 0 
+      ? allTables.filter(t => createdTables.some(ct => ct.toLowerCase() === t.toLowerCase()))
+      : allTables.filter(t => !['Stores', 'Registers', 'Transactions', 'ErrorLogs'].includes(t));
+
+    const finalTables = targetTables.length > 0 ? targetTables : allTables;
+
+    const schema = finalTables.map(tableName => {
+      const tbl = alasql.tables[tableName];
+      let columns = [];
+      let rowCount = 0;
+
+      try {
+        const sample = alasql(`SELECT * FROM ${tableName} LIMIT 1`);
+        if (sample && sample[0]) {
+          columns = Object.keys(sample[0]).map(col => ({
+            name: col,
+            type: typeof sample[0][col] === 'number' ? 'NUMBER' : 'STRING',
+            description: `Column ${col}`
+          }));
+        } else if (tbl && tbl.columns) {
+          columns = Object.keys(tbl.columns).map(col => ({
+            name: col,
+            type: 'STRING',
+            description: `Column ${col}`
+          }));
+        }
+
+        const countRes = alasql(`SELECT COUNT(*) AS [count] FROM ${tableName}`);
+        rowCount = countRes && countRes[0] ? countRes[0].count : (tbl?.data ? tbl.data.length : 0);
+      } catch {
+        // fallback
+      }
+
+      return {
+        table: tableName,
+        description: `Database table ${tableName}`,
+        columns,
+        rowCount
+      };
+    }).filter(t => t.columns.length > 0);
+
+    if (schema.length === 0) {
+      return { 
+        success: false, 
+        error: 'No tables with valid columns could be parsed from the provided SQL. Ensure statements use CREATE TABLE TableName (col1 TYPE, ...);' 
+      };
+    }
+
+    return {
+      success: true,
+      schema,
+      sql: rawSql.trim(),
+      tableCount: schema.length
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: `SQL Engine Parse Error: ${err.message}`
+    };
+  }
+}
+
+/**
+ * Generates the Question Generator Prompt using the exact inspected SQL schema
+ */
+export function generateQuestionsPromptFromSqlSchema({ sqlCode, schema, domainName }) {
+  const cleanDomain = domainName?.trim() || 'Technical Operations & Support';
+  
+  const schemaSummary = schema && schema.length > 0
+    ? schema.map(t => `- TABLE: ${t.table} (${t.columns.map(c => `${c.name} [${c.type}]`).join(', ')}) | ${t.rowCount} sample row(s)`).join('\n')
+    : 'No tables specified';
+
+  return `Act as a Senior Database Engineer and Technical Support Assessment Lead.
+
+I have provided my custom SQL Database schema and sample data for the domain "${cleanDomain}".
+
+=== PROVIDED DATABASE SCHEMA ===
+${schemaSummary}
+
+${sqlCode ? `=== SQL DEFINITIONS (REFERENCE) ===\n${sqlCode.trim().substring(0, 1500)}` : ''}
+
+=== YOUR TASK ===
+Generate exactly 10 realistic Level 2 Technical Support troubleshooting questions that test SQL query diagnostics, PowerShell system tasks, and Network troubleshooting.
+The SQL questions MUST strictly query the tables and column names listed in the schema above!
+
+FORMAT REQUIREMENTS:
+- Output RAW TEXT ONLY. Do not use conversational filler, introduction, or markdown backticks.
+- Follow this exact delimiter template for each question:
+
+=== QUESTION 1 ===
+CATEGORY: SQL
+DIFFICULTY: Basic
+TICKET_ID: INC-701
+TITLE: (Short diagnostic ticket title)
+SCENARIO: (Realistic support incident narrative describing what symptom was reported by staff or monitoring)
+PROMPT: (Explicit instructions on what to query or filter from the tables above)
+HINT: (Helpful SQL clause hint)
+STARTER_CODE: -- Write your SQL query below:\n
+EXPECTED_ANSWER: (Valid SELECT SQL query using the tables and columns above)
+EXPLANATION: (Clear technical explanation of why this query resolves the ticket)
+
+=== QUESTION 2 ===
+CATEGORY: PowerShell
+DIFFICULTY: Medium
+TICKET_ID: INC-702
+TITLE: (Service or System restart/diagnostic task)
+SCENARIO: (Support symptom regarding a frozen service or process)
+PROMPT: (Write a PowerShell command, e.g. Restart-Service, Get-Process, Test-NetConnection)
+HINT: (Helpful cmdlet hint)
+STARTER_CODE: # Write your PowerShell command:\n
+EXPECTED_ANSWER: (Target PowerShell command)
+EXPLANATION: (Technical rationale)
+
+=== QUESTION 3 ===
+CATEGORY: Network Troubleshooting
+DIFFICULTY: Medium
+TICKET_ID: INC-703
+TITLE: (Network latency or terminal connectivity audit)
+SCENARIO: (Support ticket regarding packet drop or socket timeout)
+PROMPT: (Write a network diagnostic command, e.g. ping, Test-NetConnection -Port, tracert)
+HINT: (Helpful network command hint)
+STARTER_CODE: # Write your network diagnostic command:\n
+EXPECTED_ANSWER: (Target network command)
+EXPLANATION: (Technical rationale)
+
+(Continue exact same format for QUESTION 4 through QUESTION 10)
+
+RULES:
+1. Ensure the 6 SQL questions strictly use the tables and column names provided in the schema!
+2. Include 6 SQL questions, 2 PowerShell questions, and 2 Network Troubleshooting questions.
+3. Use realistic ticket IDs (INC-701 to INC-710).
+4. Valid CATEGORY values: SQL | PowerShell | Network Troubleshooting
+5. Valid DIFFICULTY values: Basic | Medium | Intermediate | Advanced
+6. Output raw text starting directly with === QUESTION 1 ===`;
+}
+
+/**
  * Default Prompt Template (Legacy fallback)
  */
 export const AI_PROMPT_TEMPLATE = getSynchronizedAllInOnePrompt('Retail POS, Store Servers & Transaction Sync');
@@ -298,6 +477,7 @@ export function parseCustomAssessmentTxt(rawContent) {
   // If custom database SQL found, test and initialize in AlaSQL
   if (customDatabaseSql) {
     try {
+      ensureAlaSqlDatabase();
       // Split into individual SQL statements
       const statements = customDatabaseSql
         .split(';')
@@ -311,9 +491,10 @@ export function parseCustomAssessmentTxt(rawContent) {
           console.warn('Custom SQL statement warning:', stmtErr.message, 'in:', stmt);
         }
       });
+      alasql.useid = 'alasql';
 
       // Discover active tables from AlaSQL
-      const tableNames = Object.keys(alasql.tables).filter(t => !t.startsWith('_'));
+      const tableNames = Object.keys(alasql.tables || {}).filter(t => !t.startsWith('_'));
       customSchema = tableNames.map(tableName => {
         const tbl = alasql.tables[tableName];
         let columns = [];

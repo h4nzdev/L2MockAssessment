@@ -381,12 +381,54 @@ export const posDocumentation = {
   ]
 };
 
+/**
+ * Ensures that AlaSQL's default database instance exists and is active.
+ * Prevents "Cannot read properties of undefined (reading 'databaseid')" errors.
+ */
+export function ensureAlaSqlDatabase() {
+  try {
+    if (!alasql.databases) {
+      alasql.databases = {};
+    }
+    if (!alasql.databases.alasql) {
+      alasql.databases.alasql = new alasql.Database('alasql');
+    }
+    alasql.useid = 'alasql';
+    if (!alasql.tables) {
+      alasql.tables = alasql.databases.alasql.tables || {};
+    }
+    // If core tables are missing, initialize them
+    if (!alasql.tables.Stores || !alasql.tables.Registers || !alasql.tables.Transactions || !alasql.tables.ErrorLogs) {
+      initializeDatabase();
+    }
+  } catch (err) {
+    console.warn('ensureAlaSqlDatabase repair notice:', err);
+    try {
+      alasql.databases = { alasql: new alasql.Database('alasql') };
+      alasql.useid = 'alasql';
+      initializeDatabase();
+    } catch {
+      // ignore
+    }
+  }
+}
+
 export function initializeDatabase() {
   try {
-    alasql('DROP TABLE IF EXISTS Stores;');
-    alasql('DROP TABLE IF EXISTS Registers;');
-    alasql('DROP TABLE IF EXISTS Transactions;');
-    alasql('DROP TABLE IF EXISTS ErrorLogs;');
+    // 1. Ensure the default database is created and active
+    if (!alasql.databases) {
+      alasql.databases = {};
+    }
+    if (!alasql.databases.alasql) {
+      alasql.databases.alasql = new alasql.Database('alasql');
+    }
+    alasql.useid = 'alasql';
+
+    // 2. Safely recreate core tables
+    try { alasql('DROP TABLE IF EXISTS Stores;'); } catch { /* ignore */ }
+    try { alasql('DROP TABLE IF EXISTS Registers;'); } catch { /* ignore */ }
+    try { alasql('DROP TABLE IF EXISTS Transactions;'); } catch { /* ignore */ }
+    try { alasql('DROP TABLE IF EXISTS ErrorLogs;'); } catch { /* ignore */ }
 
     alasql(`
       CREATE TABLE Stores (
@@ -437,22 +479,38 @@ export function initializeDatabase() {
       );
     `);
 
-    alasql.tables.Stores.data = JSON.parse(JSON.stringify(mockStores));
-    alasql.tables.Registers.data = JSON.parse(JSON.stringify(mockRegisters));
-    alasql.tables.Transactions.data = JSON.parse(JSON.stringify(mockTransactions));
-    alasql.tables.ErrorLogs.data = JSON.parse(JSON.stringify(mockErrorLogs));
+    // 3. Populate default dataset
+    if (alasql.tables && alasql.tables.Stores) {
+      alasql.tables.Stores.data = JSON.parse(JSON.stringify(mockStores));
+    }
+    if (alasql.tables && alasql.tables.Registers) {
+      alasql.tables.Registers.data = JSON.parse(JSON.stringify(mockRegisters));
+    }
+    if (alasql.tables && alasql.tables.Transactions) {
+      alasql.tables.Transactions.data = JSON.parse(JSON.stringify(mockTransactions));
+    }
+    if (alasql.tables && alasql.tables.ErrorLogs) {
+      alasql.tables.ErrorLogs.data = JSON.parse(JSON.stringify(mockErrorLogs));
+    }
 
-    // If custom database SQL is stored, execute it on top
-    const customSql = localStorage.getItem('support_sql_custom_db_sql');
-    if (customSql) {
-      const stmts = customSql.split(';').map(s => s.trim()).filter(s => s.length > 5);
-      stmts.forEach(stmt => {
-        try {
-          alasql(stmt + ';');
-        } catch (e) {
-          console.warn('Custom SQL load warning:', e.message);
+    // 4. If custom database SQL is stored, execute it on top
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const customSql = localStorage.getItem('support_sql_custom_db_sql');
+        if (customSql) {
+          const stmts = customSql.split(';').map(s => s.trim()).filter(s => s.length > 5);
+          stmts.forEach(stmt => {
+            try {
+              alasql(stmt + ';');
+            } catch (e) {
+              console.warn('Custom SQL load warning:', e.message);
+            }
+          });
+          alasql.useid = 'alasql';
         }
-      });
+      }
+    } catch {
+      // ignore storage access error
     }
 
     return { success: true, message: 'Database initialized successfully' };
@@ -466,12 +524,16 @@ export function applyCustomDatabase(customSql) {
   try {
     if (!customSql || !customSql.trim()) return { success: false, error: 'Empty SQL string.' };
     
+    ensureAlaSqlDatabase();
     const stmts = customSql.split(';').map(s => s.trim()).filter(s => s.length > 5);
     stmts.forEach(stmt => {
       alasql(stmt + ';');
     });
+    alasql.useid = 'alasql';
 
-    localStorage.setItem('support_sql_custom_db_sql', customSql);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('support_sql_custom_db_sql', customSql);
+    }
     return { success: true };
   } catch (err) {
     console.error('Failed to apply custom database:', err);
@@ -480,7 +542,13 @@ export function applyCustomDatabase(customSql) {
 }
 
 export function clearCustomDatabase() {
-  localStorage.removeItem('support_sql_custom_db_sql');
-  localStorage.removeItem('support_sql_custom_db_schema');
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('support_sql_custom_db_sql');
+      localStorage.removeItem('support_sql_custom_db_schema');
+    }
+  } catch {
+    // ignore
+  }
   return initializeDatabase();
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import alasql from 'alasql';
 import { X, Database, Key, Table2, Layers, Eye } from 'lucide-react';
-import { mockDatabaseSchema } from '../data/mockDatabase';
+import { mockDatabaseSchema, ensureAlaSqlDatabase } from '../data/mockDatabase';
 import ResultTable from './ResultTable';
 
 export default function SchemaModal({ isOpen, onClose }) {
@@ -28,6 +28,7 @@ export default function SchemaModal({ isOpen, onClose }) {
 
   const getSampleData = (tableName) => {
     try {
+      ensureAlaSqlDatabase();
       return alasql(`SELECT * FROM ${tableName} LIMIT 5`) || [];
     } catch {
       return [];

@@ -1,4 +1,5 @@
 import alasql from 'alasql';
+import { ensureAlaSqlDatabase } from '../data/mockDatabase';
 
 /**
  * Normalizes a JavaScript value for comparison
@@ -35,40 +36,79 @@ function normalizeRow(row) {
 }
 
 /**
+ * Strips comments and extraneous whitespace from SQL queries.
+ */
+function cleanSql(sql) {
+  if (!sql) return '';
+  return sql
+    .replace(/--.*$/gm, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^[;\s]+|[;\s]+$/g, '')
+    .trim();
+}
+
+/**
+ * Translates low-level internal engine errors into clear, actionable SQL messages.
+ */
+function formatSqlError(err) {
+  const msg = err?.message || String(err) || 'SQL Syntax Error';
+  const lower = msg.toLowerCase();
+
+  if (
+    lower.includes('databaseid') ||
+    lower.includes('compile') ||
+    lower.includes('sqlcache') ||
+    lower.includes('cannot read properties of undefined') ||
+    lower.includes('cannot read property')
+  ) {
+    return 'SQL Syntax Error: Incomplete or invalid query structure. Please verify your SELECT columns, FROM table name, and WHERE conditions.';
+  }
+  if (lower.includes('table does not exist') || lower.includes('is not exists') || lower.includes('no table found')) {
+    return `No table found: ${msg}. Check your table spelling in the Schema explorer.`;
+  }
+  if (lower.includes('column does not exist')) {
+    return `Column not found: ${msg}. Check your column spelling in the Schema explorer.`;
+  }
+  return msg;
+}
+
+/**
  * Validates user SQL query against the expected SQL query using AlaSQL
  */
 export function validateQuery(userQuery, expectedQuery) {
   const startTime = performance.now();
 
-  if (!userQuery || !userQuery.trim()) {
+  const queryToRun = cleanSql(userQuery);
+
+  if (!queryToRun) {
     return {
       isCorrect: false,
       userResult: null,
       expectedResult: null,
-      error: 'Please enter a SQL query before checking your answer.',
+      error: 'Please enter an executable SQL statement before checking your answer.',
       executionTimeMs: 0,
-      feedback: 'Query is empty.'
+      feedback: 'Query is empty or contains only comments.'
     };
   }
+
+  // Ensure AlaSQL database is healthy and ready
+  ensureAlaSqlDatabase();
 
   let userResult;
   let userExecutionTime;
   try {
-    const queryToRun = userQuery.trim().replace(/;+\s*$/, '');
     const runStart = performance.now();
     userResult = alasql(queryToRun);
     userExecutionTime = Math.round((performance.now() - runStart) * 100) / 100;
   } catch (err) {
-    const isTableNotFound = (err.message || '').toLowerCase().includes('table');
+    const friendlyError = formatSqlError(err);
     return {
       isCorrect: false,
       userResult: null,
       expectedResult: null,
-      error: err.message || 'SQL Syntax Error',
+      error: friendlyError,
       executionTimeMs: Math.round((performance.now() - startTime) * 100) / 100,
-      feedback: isTableNotFound
-        ? `No table found: ${err.message}. Check your table spelling in the Schema explorer.`
-        : `Query execution failed: ${err.message || 'SQL Syntax or runtime error'}`
+      feedback: friendlyError
     };
   }
 
@@ -80,13 +120,14 @@ export function validateQuery(userQuery, expectedQuery) {
       expectedResult: null,
       error: 'Query did not return a valid result set. Ensure you are using a SELECT query.',
       executionTimeMs: userExecutionTime,
-      feedback: 'Invalid result format.'
+      feedback: 'Invalid result format. Please use a SELECT query.'
     };
   }
 
   let expectedResult;
   try {
-    const cleanExpected = expectedQuery.trim().replace(/;+\s*$/, '');
+    ensureAlaSqlDatabase();
+    const cleanExpected = cleanSql(expectedQuery);
     expectedResult = alasql(cleanExpected);
   } catch (err) {
     console.error('Expected query execution failed:', err);

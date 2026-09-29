@@ -3,12 +3,12 @@ import { createContext, useContext, useState, useEffect } from 'react';
 const ThemeContext = createContext(null);
 
 export function ThemeProvider({ children }) {
-  // Light mode is the default
+  // Dark mode is the default
   const [theme, setTheme] = useState(() => {
     try {
-      return localStorage.getItem('support_sql_theme') || 'light';
+      return localStorage.getItem('support_sql_theme') || 'dark';
     } catch {
-      return 'light';
+      return 'dark';
     }
   });
 
@@ -35,6 +35,7 @@ export function ThemeProvider({ children }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useTheme() {
   const ctx = useContext(ThemeContext);
   if (!ctx) throw new Error('useTheme must be used inside ThemeProvider');
