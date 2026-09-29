@@ -100,8 +100,8 @@ export default function SchemaModal({ isOpen, onClose }) {
 
           {/* Table Details Area */}
           <div className="flex-1 flex flex-col p-6 overflow-y-auto bg-[var(--bg-base)]">
-            <div className="flex items-center justify-between mb-4 pb-3 border-b theme-border-m">
-              <div>
+            <div className="flex items-center justify-between mb-4 pb-3 border-b theme-border-m gap-4 flex-wrap sm:flex-nowrap">
+              <div className="min-w-0 flex-1">
                 <h4 className="text-lg font-bold theme-text font-mono flex items-center gap-2">
                   <span className="text-blue-600 dark:text-sky-300">{currentTableMeta.table}</span>
                 </h4>
@@ -111,28 +111,28 @@ export default function SchemaModal({ isOpen, onClose }) {
               </div>
 
               {/* View Toggle */}
-              <div className="flex rounded-lg bg-[var(--bg-surface2)] border theme-border-m p-1 text-xs">
+              <div className="flex items-center shrink-0 rounded-lg bg-[var(--bg-surface2)] border theme-border-m p-1 text-xs">
                 <button
                   onClick={() => setViewMode('schema')}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-medium transition-colors ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium whitespace-nowrap transition-colors ${
                     viewMode === 'schema'
-                      ? 'bg-blue-600 text-white dark:bg-blue-900 dark:text-sky-200 shadow-sm'
+                      ? 'bg-blue-600 text-white dark:bg-blue-900 dark:text-sky-200 shadow-sm font-semibold'
                       : 'theme-text-muted hover:theme-text-sec'
                   }`}
                 >
-                  <Layers className="w-3.5 h-3.5" />
-                  Schema Columns
+                  <Layers className="w-3.5 h-3.5 shrink-0" />
+                  <span>Schema Columns</span>
                 </button>
                 <button
                   onClick={() => setViewMode('sample')}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-medium transition-colors ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium whitespace-nowrap transition-colors ${
                     viewMode === 'sample'
-                      ? 'bg-blue-600 text-white dark:bg-blue-900 dark:text-sky-200 shadow-sm'
+                      ? 'bg-blue-600 text-white dark:bg-blue-900 dark:text-sky-200 shadow-sm font-semibold'
                       : 'theme-text-muted hover:theme-text-sec'
                   }`}
                 >
-                  <Eye className="w-3.5 h-3.5" />
-                  Sample Records
+                  <Eye className="w-3.5 h-3.5 shrink-0" />
+                  <span>Sample Records</span>
                 </button>
               </div>
             </div>

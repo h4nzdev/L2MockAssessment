@@ -24,7 +24,8 @@ import {
   Sparkles, 
   Lock,
   Wifi,
-  Cpu
+  Cpu,
+  Activity
 } from 'lucide-react';
 import { questionBank, difficultyColors } from '../data/questionBank';
 import { initializeDatabase, posDocumentation, clearCustomDatabase } from '../data/mockDatabase';
@@ -467,6 +468,17 @@ export default function AssessmentPage() {
             </div>
           )}
 
+          {/* L2 Incident Simulator */}
+          <button
+            onClick={() => navigate('/simulator')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300/80 bg-amber-50 hover:bg-amber-100 text-amber-800 dark:border-amber-700/60 dark:bg-amber-950/40 dark:hover:bg-amber-900/40 dark:text-amber-300 text-xs font-mono transition-all shadow-sm"
+            title="L2 Incident Triage & Live Queue Simulator"
+          >
+            <Activity className="w-3.5 h-3.5 text-amber-500" />
+            <span className="hidden sm:inline">L2 Simulator</span>
+            <span className="sm:hidden">Simulator</span>
+          </button>
+
           {/* Custom Assessment & Mock DB Builder */}
           <button
             onClick={() => navigate('/builder')}
@@ -891,31 +903,31 @@ export default function AssessmentPage() {
           <div className="flex flex-col rounded-2xl border theme-border bg-[var(--bg-surface)] overflow-hidden shadow-xl">
             {/* Output Subheader & Tab Switcher */}
             <div className="flex items-center justify-between px-3 py-2 bg-[var(--bg-surface2)] border-b theme-border-m text-xs">
-              <div className="flex items-center gap-1 rounded-lg bg-[var(--bg-base)] border theme-border-m p-0.5">
+              <div className="flex items-center gap-1 shrink-0 rounded-lg bg-[var(--bg-base)] border theme-border-m p-0.5">
                 <button
                   onClick={() => setActiveOutputTab('user')}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-mono text-xs transition-colors ${
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-mono text-xs whitespace-nowrap transition-colors ${
                     activeOutputTab === 'user'
                       ? 'bg-blue-600 text-white font-semibold shadow-sm dark:bg-blue-900 dark:text-sky-200'
                       : 'theme-text-muted hover:theme-text-sec'
                   }`}
                 >
-                  {currentEnv === 'powershell' ? <Terminal className="w-3.5 h-3.5 text-current dark:text-purple-300" /> :
-                   currentEnv === 'network' ? <Wifi className="w-3.5 h-3.5 text-current dark:text-cyan-300" /> :
-                   <Database className="w-3.5 h-3.5 text-current dark:text-sky-400" />}
-                  Execution Result
+                  {currentEnv === 'powershell' ? <Terminal className="w-3.5 h-3.5 shrink-0 text-current dark:text-purple-300" /> :
+                   currentEnv === 'network' ? <Wifi className="w-3.5 h-3.5 shrink-0 text-current dark:text-cyan-300" /> :
+                   <Database className="w-3.5 h-3.5 shrink-0 text-current dark:text-sky-400" />}
+                  <span>Execution Result</span>
                 </button>
 
                 <button
                   onClick={() => setActiveOutputTab('expected')}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-mono text-xs transition-colors ${
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-mono text-xs whitespace-nowrap transition-colors ${
                     activeOutputTab === 'expected'
                       ? 'bg-blue-600 text-white font-semibold shadow-sm dark:bg-blue-900 dark:text-sky-200'
                       : 'theme-text-muted hover:theme-text-sec'
                   }`}
                 >
-                  <Eye className="w-3.5 h-3.5 text-current dark:text-sky-400" />
-                  Expected Solution
+                  <Eye className="w-3.5 h-3.5 shrink-0 text-current dark:text-sky-400" />
+                  <span>Expected Solution</span>
                 </button>
               </div>
 

@@ -18,6 +18,7 @@ import {
   Lock,
   Unlock,
   RotateCcw,
+  Activity,
 } from "lucide-react";
 import {
   DOMAIN_PRESETS,
@@ -295,13 +296,22 @@ export default function CustomBuilderPage() {
       {/* Top Navigation Bar */}
       <header className="sticky top-0 z-40 border-b theme-border bg-[var(--bg-header)] backdrop-blur-md px-6 py-4">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-4 w-full sm:w-auto">
+          <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
             <button
               onClick={() => navigate("/assessment")}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-700 dark:text-sky-300 text-xs font-mono transition-all shadow-sm active:scale-95 shrink-0"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-700 dark:text-sky-300 text-xs font-mono transition-all shadow-sm active:scale-95 shrink-0"
             >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Back to Assessment</span>
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Assessment</span>
+            </button>
+
+            <button
+              onClick={() => navigate("/simulator")}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-amber-300/80 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-800 dark:text-amber-300 text-xs font-mono transition-all shadow-sm active:scale-95 shrink-0"
+              title="Open L2 Incident & Triage Simulator"
+            >
+              <Activity className="w-3.5 h-3.5 text-amber-500" />
+              <span>L2 Simulator</span>
             </button>
 
             <div className="h-6 w-px bg-[var(--border-muted)] hidden sm:block" />
