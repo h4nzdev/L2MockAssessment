@@ -1,61 +1,375 @@
 /**
- * Parser and Template Generator for AI-Generated Question .txt Files
- * Allows users to generate questions via ChatGPT, Claude, Gemini, etc. without an API key.
+ * Parser and Template Generator for Custom AI Synchronized Assessments
+ * Synchronizes custom mock database schemas (CREATE TABLE / INSERT) with 10 questions.
  */
+import alasql from 'alasql';
 
-export const AI_PROMPT_TEMPLATE = `Generate exactly 10 Technical Support interview troubleshooting questions (mixing SQL, PowerShell, and Network Troubleshooting) in the domain: Retail POS, Store Servers & Transaction Sync.
+export const DOMAIN_PRESETS = [
+  {
+    id: 'restaurant',
+    title: 'Restaurant POS & Kitchen Display',
+    icon: 'UtensilsCrossed',
+    desc: 'Menu items, table orders, server tip reconciliation, and kitchen display status',
+    tables: [
+      'MenuItems (item_id, item_name, category, price, is_available)',
+      'Orders (order_id, table_number, server_id, total_amount, payment_status, created_at)',
+      'KitchenTickets (ticket_id, order_id, station, prep_status, delay_seconds)'
+    ],
+    sampleSql: `
+CREATE TABLE MenuItems (item_id INT, item_name STRING, category STRING, price NUMBER, is_available INT);
+INSERT INTO MenuItems VALUES 
+(1, 'Truffle Burger', 'Entree', 18.50, 1),
+(2, 'Margherita Flatbread', 'Entree', 14.00, 1),
+(3, 'Caesar Salad', 'Starter', 9.50, 1),
+(4, 'Craft Draft IPA', 'Beverage', 7.50, 1),
+(5, 'Espresso Martini', 'Beverage', 13.00, 0);
 
-Format each question using this EXACT structured text template so our tool can parse it:
+CREATE TABLE Orders (order_id INT, table_number INT, server_id STRING, total_amount NUMBER, payment_status STRING, created_at STRING);
+INSERT INTO Orders VALUES 
+(501, 4, 'SRV-12', 45.50, 'PAID', '2026-09-29 19:15:00'),
+(502, 7, 'SRV-08', 92.00, 'PAID', '2026-09-29 19:22:15'),
+(503, 2, 'SRV-12', 28.00, 'VOIDED', '2026-09-29 19:30:10'),
+(504, 11, 'SRV-15', 115.50, 'PENDING_PAYMENT', '2026-09-29 19:45:00'),
+(505, 5, 'SRV-08', 34.00, 'FAILED', '2026-09-29 19:50:20');
+
+CREATE TABLE KitchenTickets (ticket_id INT, order_id INT, station STRING, prep_status STRING, delay_seconds INT);
+INSERT INTO KitchenTickets VALUES 
+(901, 501, 'GRILL', 'COMPLETED', 120),
+(902, 502, 'OVEN', 'COMPLETED', 340),
+(903, 503, 'BAR', 'CANCELLED', 0),
+(904, 504, 'GRILL', 'DELAYED', 650),
+(905, 505, 'BAR', 'IN_PROGRESS', 180);
+`
+  },
+  {
+    id: 'healthcare',
+    title: 'Healthcare Clinic & Patient Registry',
+    icon: 'Stethoscope',
+    desc: 'Patient records, physician appointments, insurance claims, and check-in kiosks',
+    tables: [
+      'Patients (patient_id, full_name, date_of_birth, insurance_status, balance_due)',
+      'Appointments (appointment_id, patient_id, provider_id, status, scheduled_time)',
+      'BillingClaims (claim_id, appointment_id, claim_amount, claim_status, payer_code)'
+    ],
+    sampleSql: `
+CREATE TABLE Patients (patient_id INT, full_name STRING, date_of_birth STRING, insurance_status STRING, balance_due NUMBER);
+INSERT INTO Patients VALUES 
+(101, 'Eleanor Vance', '1984-06-12', 'ACTIVE', 25.00),
+(102, 'Marcus Brody', '1972-11-04', 'INACTIVE', 140.00),
+(103, 'Sofia Reyes', '1995-03-21', 'ACTIVE', 0.00),
+(104, 'David Chen', '1968-08-19', 'ACTIVE', 75.50),
+(105, 'Amina Patel', '2001-01-15', 'PENDING_VERIFY', 0.00);
+
+CREATE TABLE Appointments (appointment_id INT, patient_id INT, provider_id STRING, status STRING, scheduled_time STRING);
+INSERT INTO Appointments VALUES 
+(201, 101, 'DR-HART', 'COMPLETED', '2026-09-29 09:00:00'),
+(202, 102, 'DR-KIM', 'NO_SHOW', '2026-09-29 09:30:00'),
+(203, 103, 'DR-HART', 'COMPLETED', '2026-09-29 10:15:00'),
+(204, 104, 'DR-LEE', 'IN_PROGRESS', '2026-09-29 11:00:00'),
+(205, 105, 'DR-KIM', 'CANCELLED', '2026-09-29 11:45:00');
+
+CREATE TABLE BillingClaims (claim_id INT, appointment_id INT, claim_amount NUMBER, claim_status STRING, payer_code STRING);
+INSERT INTO BillingClaims VALUES 
+(701, 201, 185.00, 'PAID', 'BCBS'),
+(702, 202, 50.00, 'DENIED', 'MEDICARE'),
+(703, 203, 220.00, 'PENDING', 'AETNA'),
+(704, 204, 310.00, 'UNBILLED', 'CIGNA'),
+(705, 205, 0.00, 'VOIDED', 'NONE');
+`
+  },
+  {
+    id: 'hotel',
+    title: 'Hospitality Hotel PMS & Front Desk',
+    icon: 'Hotel',
+    desc: 'Room inventory, guest folios, keycard encoders, and night audit balancing',
+    tables: [
+      'Rooms (room_number INT, room_type STRING, floor INT, status STRING, rate_per_night NUMBER)',
+      'Reservations (res_id INT, guest_name STRING, room_number INT, checkin_status STRING, total_charge NUMBER)',
+      'KeyCardLogs (log_id INT, room_number INT, encoder_terminal STRING, event_status STRING, timestamp STRING)'
+    ],
+    sampleSql: `
+CREATE TABLE Rooms (room_number INT, room_type STRING, floor INT, status STRING, rate_per_night NUMBER);
+INSERT INTO Rooms VALUES 
+(101, 'Deluxe King', 1, 'OCCUPIED', 189.00),
+(102, 'Standard Queen', 1, 'CLEANING', 149.00),
+(201, 'Executive Suite', 2, 'OCCUPIED', 299.00),
+(202, 'Deluxe King', 2, 'VACANT', 189.00),
+(301, 'Penthouse Suite', 3, 'MAINTENANCE', 499.00);
+
+CREATE TABLE Reservations (res_id INT, guest_name STRING, room_number INT, checkin_status STRING, total_charge NUMBER);
+INSERT INTO Reservations VALUES 
+(3001, 'James Wilson', 101, 'CHECKED_IN', 378.00),
+(3002, 'Claire Redfield', 201, 'CHECKED_IN', 598.00),
+(3003, 'Leon Kennedy', 202, 'RESERVED', 189.00),
+(3004, 'Ada Wong', 301, 'CANCELLED', 0.00);
+
+CREATE TABLE KeyCardLogs (log_id INT, room_number INT, encoder_terminal STRING, event_status STRING, timestamp STRING);
+INSERT INTO KeyCardLogs VALUES 
+(8001, 101, 'ENC-DESK-01', 'SUCCESS', '2026-09-29 15:00:10'),
+(8002, 201, 'ENC-DESK-02', 'SUCCESS', '2026-09-29 15:30:22'),
+(8003, 202, 'ENC-DESK-01', 'ERROR_COMM_TIMEOUT', '2026-09-29 16:10:05'),
+(8004, 301, 'ENC-DESK-02', 'ERROR_CHIP_DEFECT', '2026-09-29 16:45:00');
+`
+  },
+  {
+    id: 'atm',
+    title: 'Banking Branch ATM Fleet & Cash Vault',
+    icon: 'Landmark',
+    desc: 'Automated teller terminals, cassette cash levels, transaction journals, and network pings',
+    tables: [
+      'ATMs (atm_id INT, branch_name STRING, ip_address STRING, status STRING, cash_level NUMBER)',
+      'DispenserUnits (unit_id INT, atm_id INT, denomination INT, bills_remaining INT, is_jammed INT)',
+      'ATMTransactions (txn_id INT, atm_id INT, card_issuer STRING, txn_type STRING, amount NUMBER, status STRING)'
+    ],
+    sampleSql: `
+CREATE TABLE ATMs (atm_id INT, branch_name STRING, ip_address STRING, status STRING, cash_level NUMBER);
+INSERT INTO ATMs VALUES 
+(401, 'Downtown Financial Center', '10.50.1.10', 'ONLINE', 45000),
+(402, 'Airport Terminal 2', '10.50.2.10', 'OFFLINE', 0),
+(403, 'University Student Union', '10.50.3.10', 'DEGRADED', 8200),
+(404, 'Metro Subway Plaza', '10.50.4.10', 'ONLINE', 32000);
+
+CREATE TABLE DispenserUnits (unit_id INT, atm_id INT, denomination INT, bills_remaining INT, is_jammed INT);
+INSERT INTO DispenserUnits VALUES 
+(601, 401, 20, 1500, 0),
+(602, 401, 100, 300, 0),
+(603, 402, 20, 0, 1),
+(604, 403, 20, 110, 0),
+(605, 404, 20, 1200, 0);
+
+CREATE TABLE ATMTransactions (txn_id INT, atm_id INT, card_issuer STRING, txn_type STRING, amount NUMBER, status STRING);
+INSERT INTO ATMTransactions VALUES 
+(9001, 401, 'VISA', 'WITHDRAWAL', 100, 'COMPLETED'),
+(9002, 401, 'MASTERCARD', 'BALANCE_INQUIRY', 0, 'COMPLETED'),
+(9003, 402, 'VISA', 'WITHDRAWAL', 200, 'FAILED_COMM_TIMEOUT'),
+(9004, 403, 'DISCOVER', 'WITHDRAWAL', 80, 'FAILED_HARDWARE_JAM'),
+(9005, 404, 'VISA', 'WITHDRAWAL', 60, 'COMPLETED');
+`
+  }
+];
+
+/**
+ * Generates the All-In-One Synchronized Prompt for any chosen domain.
+ * This instructs the AI to generate BOTH the custom Mock Database SQL (tables & data)
+ * AND the 10 questions that directly query those tables.
+ */
+export function getSynchronizedAllInOnePrompt(topicName) {
+  const cleanTopic = topicName?.trim() || 'Retail POS, Store Servers & Transaction Sync';
+
+  return `Act as a Senior Database Engineer and Technical Support Assessment Lead.
+
+I need you to generate a fully synchronized Mock Database and 10 Technical Support troubleshooting questions for the domain: "${cleanTopic}".
+
+Output RAW TEXT ONLY. Do not wrap in markdown quotes or preamble. Follow this exact two-part format:
+
+PART 1: MOCK DATABASE SQL
+Generate 2 or 3 realistic tables for "${cleanTopic}" with 5 to 8 sample rows per table.
+Use standard AlaSQL syntax (avoid reserved keywords like "count" or "total" as raw column names; use "total_amount", "item_count", etc.).
+
+=== MOCK DATABASE SQL ===
+CREATE TABLE TableA (col1 INT, col2 STRING, col3 NUMBER, status STRING);
+INSERT INTO TableA VALUES (1, 'Sample 1', 45.00, 'ACTIVE'), (2, 'Sample 2', 90.00, 'INACTIVE');
+
+CREATE TABLE TableB (id INT, ref_id INT, event_name STRING, created_at STRING);
+INSERT INTO TableB VALUES (101, 1, 'Event Alpha', '2026-09-29 12:00:00');
+
+PART 2: 10 TROUBLESHOOTING QUESTIONS
+Generate exactly 10 incident troubleshooting questions that DIRECTLY query the tables defined in Part 1.
+Mix: 6 SQL questions, 2 PowerShell questions, and 2 Network Troubleshooting questions.
+
+Format each question exactly as follows:
 
 === QUESTION 1 ===
 CATEGORY: SQL
 DIFFICULTY: Basic
-TICKET_ID: INC-301
-TITLE: Offline Store Controller Identification
-SCENARIO: Store operations reported that multiple branch servers failed overnight health checks.
-PROMPT: Write a SQL query from Stores table to select store_id, store_name, city, and server_status where server_status is "OFFLINE".
-HINT: Use WHERE server_status = 'OFFLINE'.
-STARTER_CODE: -- Incident INC-301: Offline Store Server Identification\n-- Write your SQL query below:\n
-EXPECTED_ANSWER: SELECT store_id, store_name, city, server_status FROM Stores WHERE server_status = 'OFFLINE';
-EXPLANATION: Filters stores where the controller server is in OFFLINE state.
+TICKET_ID: INC-501
+TITLE: Identify Inactive Records in TableA
+SCENARIO: Support operations detected irregular statuses in TableA.
+PROMPT: Write a SQL query from TableA to select col1, col2, and status where status = "INACTIVE".
+HINT: Use WHERE status = 'INACTIVE'.
+STARTER_CODE: -- Write your SQL query below:\n
+EXPECTED_ANSWER: SELECT col1, col2, status FROM TableA WHERE status = 'INACTIVE';
+EXPLANATION: Filters records in TableA that are currently inactive.
 
 === QUESTION 2 ===
 CATEGORY: PowerShell
 DIFFICULTY: Medium
-TICKET_ID: INC-302
-TITLE: Restart Stuck POS Print Spooler Service
-SCENARIO: Receipt printer on register lane REG-101 is hung with multiple jobs stuck in queue.
-PROMPT: Write a PowerShell command to forcibly restart the Windows Print Spooler service.
-HINT: Use Restart-Service cmdlet with -Name and -Force flags.
-STARTER_CODE: # Write your PowerShell command below:\n
-EXPECTED_ANSWER: Restart-Service -Name Spooler -Force
-EXPLANATION: Restarts the spooler service to clear stuck print buffers.
+TICKET_ID: INC-502
+TITLE: Restart ${cleanTopic} Service
+SCENARIO: The local backend service is frozen and not accepting incoming client requests.
+PROMPT: Write a PowerShell command to restart the service named "${cleanTopic.replace(/[^A-Za-z0-9]/g, '')}Service" with force.
+HINT: Use Restart-Service -Name.
+STARTER_CODE: # Write your PowerShell command:\n
+EXPECTED_ANSWER: Restart-Service -Name ${cleanTopic.replace(/[^A-Za-z0-9]/g, '')}Service -Force
+EXPLANATION: Forcibly restarts the frozen system daemon.
 
-=== QUESTION 3 ===
-CATEGORY: Network Troubleshooting
-DIFFICULTY: Intermediate
-TICKET_ID: INC-303
-TITLE: Test Store Controller TCP Port Connectivity
-SCENARIO: Register lane REG-104 is unable to reach the on-prem store server at IP 10.104.0.5 on port 8080.
-PROMPT: Write a network command or PowerShell cmdlet to test TCP connection to 10.104.0.5 on port 8080.
-HINT: Use Test-NetConnection with -ComputerName and -Port parameters.
-STARTER_CODE: # Write your diagnostic command below:\n
-EXPECTED_ANSWER: Test-NetConnection -ComputerName 10.104.0.5 -Port 8080
-EXPLANATION: Verifies Layer 4 TCP port reachability to store server controller.
-
-(Continue the exact same template format for QUESTION 4 through QUESTION 10)
-Important Rules:
-1. Valid CATEGORY values: SQL | PowerShell | Network Troubleshooting
-2. Valid DIFFICULTY values: Basic | Medium | Intermediate | Advanced
-3. For SQL questions, use our schema tables: Stores, Registers, Transactions, ErrorLogs
-4. Do NOT include markdown code blocks, conversational greetings, or extra explanations. Output raw structured text only.`;
+(Continue exact same format for QUESTION 3 through QUESTION 10)
+Rules:
+1. Ensure the SQL queries in the questions actually exist in the tables created in Part 1!
+2. Valid CATEGORY values: SQL | PowerShell | Network Troubleshooting
+3. Valid DIFFICULTY values: Basic | Medium | Intermediate | Advanced
+4. Do NOT output conversational text. Output raw text starting with === MOCK DATABASE SQL ===`;
+}
 
 /**
- * Robustly parses AI-generated text into standardized question objects.
- * Supports:
- * 1. Structured block delimiter format (=== QUESTION N ===)
- * 2. Embedded JSON array format
- * 3. Line-based key-value format (Q1: / Category: / etc.)
+ * Generates Prompt 1: Mock Database SQL only
+ */
+export function getDatabasePromptOnly(topicName) {
+  const cleanTopic = topicName?.trim() || 'Retail POS';
+  return `Generate an in-memory SQL database schema and realistic sample records for "${cleanTopic}" using AlaSQL syntax.
+
+Format the output starting with this delimiter:
+
+=== MOCK DATABASE SQL ===
+CREATE TABLE ... (...);
+INSERT INTO ... VALUES (...);
+
+Rules:
+1. Create 2 to 3 related tables with primary keys and foreign keys.
+2. Insert 5 to 10 realistic sample rows per table.
+3. Use data types: INT, STRING, NUMBER.
+4. Avoid unquoted reserved words (e.g. use "total_amount" instead of "total", "txn_count" instead of "count").
+5. Output raw SQL only without markdown code blocks.`;
+}
+
+/**
+ * Generates Prompt 2: Questions only, based on a given schema
+ */
+export function getQuestionsPromptOnly(topicName, schemaDetails) {
+  const cleanTopic = topicName?.trim() || 'Retail POS';
+  const schemaText = schemaDetails || 'Stores (store_id, store_name, server_status), Registers (register_id, store_id, is_online), Transactions (transaction_id, total_amount, status)';
+
+  return `Generate 10 Level 2 Technical Support troubleshooting questions for the domain: "${cleanTopic}".
+
+The questions MUST query these exact database tables:
+${schemaText}
+
+Format each question exactly as follows:
+
+=== QUESTION 1 ===
+CATEGORY: SQL
+DIFFICULTY: Basic
+TICKET_ID: INC-601
+TITLE: ...
+SCENARIO: ...
+PROMPT: ...
+HINT: ...
+STARTER_CODE: -- Write query here:\n
+EXPECTED_ANSWER: SELECT ...;
+EXPLANATION: ...
+
+(Repeat for QUESTION 2 through QUESTION 10)
+Rules:
+1. 6 SQL questions, 2 PowerShell questions, 2 Network questions.
+2. Make sure table names and column names match the schema above.
+3. Raw text only without markdown backticks.`;
+}
+
+/**
+ * Default Prompt Template (Legacy fallback)
+ */
+export const AI_PROMPT_TEMPLATE = getSynchronizedAllInOnePrompt('Retail POS, Store Servers & Transaction Sync');
+
+/**
+ * Full Parser: Handles both Mock Database SQL (Part 1) and Questions (Part 2)
+ */
+export function parseCustomAssessmentTxt(rawContent) {
+  if (!rawContent || !rawContent.trim()) {
+    return { success: false, error: 'Input is empty. Please upload or paste your .txt content.' };
+  }
+
+  const cleanContent = rawContent.trim();
+  let customDatabaseSql = '';
+  let customSchema = [];
+  let executionError = null;
+
+  // 1. Look for MOCK DATABASE SQL block
+  const dbMatch = cleanContent.match(/===\s*MOCK DATABASE SQL\s*===([\s\S]*?)(?:===\s*QUESTION|$)/i);
+  if (dbMatch) {
+    customDatabaseSql = dbMatch[1].trim();
+  } else {
+    // Check if raw CREATE TABLE exists in first half of document
+    const createTableMatch = cleanContent.match(/(CREATE\s+TABLE[\s\S]*?)(?:===\s*QUESTION|$)/i);
+    if (createTableMatch) {
+      customDatabaseSql = createTableMatch[1].trim();
+    }
+  }
+
+  // If custom database SQL found, test and initialize in AlaSQL
+  if (customDatabaseSql) {
+    try {
+      // Split into individual SQL statements
+      const statements = customDatabaseSql
+        .split(';')
+        .map(s => s.trim())
+        .filter(s => s.length > 5);
+
+      statements.forEach(stmt => {
+        try {
+          alasql(stmt + ';');
+        } catch (stmtErr) {
+          console.warn('Custom SQL statement warning:', stmtErr.message, 'in:', stmt);
+        }
+      });
+
+      // Discover active tables from AlaSQL
+      const tableNames = Object.keys(alasql.tables).filter(t => !t.startsWith('_'));
+      customSchema = tableNames.map(tableName => {
+        const tbl = alasql.tables[tableName];
+        let columns = [];
+        let rowCount = 0;
+
+        try {
+          const sample = alasql(`SELECT * FROM ${tableName} LIMIT 1`);
+          if (sample && sample[0]) {
+            columns = Object.keys(sample[0]).map(col => ({
+              name: col,
+              type: typeof sample[0][col] === 'number' ? 'NUMBER' : 'STRING',
+              description: `Attribute ${col}`
+            }));
+          }
+          const countRes = alasql(`SELECT COUNT(*) AS [count] FROM ${tableName}`);
+          rowCount = countRes && countRes[0] ? countRes[0].count : (tbl.data ? tbl.data.length : 0);
+        } catch {
+          // fallback
+        }
+
+        return {
+          table: tableName,
+          description: `Custom ${tableName} table`,
+          columns,
+          rowCount
+        };
+      }).filter(t => t.columns.length > 0);
+
+    } catch (err) {
+      executionError = err.message;
+    }
+  }
+
+  // 2. Parse Questions
+  const questionsResult = parseAiTxt(cleanContent);
+
+  if (!questionsResult.success && (!customSchema || customSchema.length === 0)) {
+    return {
+      success: false,
+      error: questionsResult.error || 'Failed to parse database and questions from the provided text.'
+    };
+  }
+
+  return {
+    success: true,
+    hasCustomDatabase: customSchema.length > 0,
+    databaseSql: customDatabaseSql,
+    schema: customSchema,
+    questions: questionsResult.questions || [],
+    count: questionsResult.questions ? questionsResult.questions.length : 0,
+    databaseError: executionError
+  };
+}
+
+/**
+ * Standard question extractor
  */
 export function parseAiTxt(rawContent) {
   if (!rawContent || !rawContent.trim()) {
@@ -64,7 +378,7 @@ export function parseAiTxt(rawContent) {
 
   const cleanContent = rawContent.trim();
 
-  // 1. Check if the content is pure JSON or contains a JSON block
+  // 1. JSON block check
   const jsonMatch = cleanContent.match(/\[\s*\{[\s\S]*\}\s*\]/);
   if (jsonMatch) {
     try {
@@ -78,7 +392,7 @@ export function parseAiTxt(rawContent) {
     }
   }
 
-  // 2. Structured text delimiter parser: Look for "=== QUESTION" or "QUESTION <N>" or "---"
+  // 2. Split on "=== QUESTION"
   const questionBlocks = cleanContent.split(/(?:^|\n)\s*={2,}\s*QUESTION\s*\d*\s*={2,}\s*/i)
     .filter(block => block.trim().length > 0);
 
@@ -86,6 +400,10 @@ export function parseAiTxt(rawContent) {
     const parsedQuestions = [];
 
     questionBlocks.forEach((block, idx) => {
+      // Avoid parsing the database SQL block as a question
+      if (block.includes('CREATE TABLE') && !block.includes('CATEGORY:')) {
+        return;
+      }
       const q = parseSingleBlock(block, idx);
       if (q && q.prompt) {
         parsedQuestions.push(q);
@@ -95,31 +413,18 @@ export function parseAiTxt(rawContent) {
     if (parsedQuestions.length > 0) {
       return { 
         success: true, 
-        questions: parsedQuestions.slice(0, 15), // cap at 15
+        questions: parsedQuestions.slice(0, 15),
         count: parsedQuestions.length 
       };
     }
   }
 
-  // 3. Fallback: Line-based parser for Q1 / Title / Prompt formats
-  const fallbackQuestions = parseLineFallback(cleanContent);
-  if (fallbackQuestions.length > 0) {
-    return {
-      success: true,
-      questions: fallbackQuestions.slice(0, 15),
-      count: fallbackQuestions.length
-    };
-  }
-
   return {
     success: false,
-    error: 'Could not extract questions from the provided file. Please verify the file follows the template format (=== QUESTION N ===) with PROMPT and EXPECTED_ANSWER fields.'
+    error: 'Could not extract questions from the provided text. Ensure each question starts with === QUESTION N === and has PROMPT and EXPECTED_ANSWER.'
   };
 }
 
-/**
- * Parses a single text block with KEY: Value pairs
- */
 function parseSingleBlock(block, index) {
   const lines = block.split('\n');
   const data = {};
@@ -129,18 +434,15 @@ function parseSingleBlock(block, index) {
     const trimmed = line.trim();
     if (!trimmed) continue;
 
-    // Check if this line is a key-value header
     const match = line.match(/^\s*([A-Za-z0-9_-]+)\s*:\s*(.*)$/);
     if (match) {
       currentKey = match[1].toUpperCase().replace(/-/g, '_');
       data[currentKey] = match[2].trim();
     } else if (currentKey) {
-      // Continuation line for previous key (e.g. multiline prompt/scenario)
       data[currentKey] = (data[currentKey] ? data[currentKey] + '\n' : '') + trimmed;
     }
   }
 
-  // Normalize fields
   const category = cleanCategory(data.CATEGORY || data.TOPIC);
   const difficulty = cleanDifficulty(data.DIFFICULTY || data.LEVEL);
   const ticketId = data.TICKET_ID || data.TICKET || `INC-AI-${300 + index + 1}`;
@@ -167,61 +469,20 @@ function parseSingleBlock(block, index) {
     prompt,
     hint,
     starterCode,
-    expectedQuery: expectedAnswer, // For SQL execution
-    expectedAnswer, // For PowerShell / Network comparison
+    expectedQuery: expectedAnswer,
+    expectedAnswer,
     explanation,
-    tags: [category, difficulty, 'AI-Imported'],
+    tags: [category, difficulty, 'Custom-AI'],
     simpleGoal: scenario.length > 20 ? scenario.slice(0, 150) + '...' : prompt,
     simplePrompt: prompt,
     simpleSteps: [
       `Category: ${category}`,
-      `Identify target system / asset in ticket`,
+      `Review target system and parameters`,
       `Execute and verify resolution command`
     ]
   };
 }
 
-/**
- * Line-based fallback parser
- */
-function parseLineFallback(content) {
-  const questions = [];
-  // Split on "Question 1", "Q1.", "1.", etc.
-  const rawParts = content.split(/(?:^|\n)\s*(?:Question|Q|\d+)\s*[:.)-]\s*/i).filter(p => p.trim());
-
-  rawParts.forEach((part, idx) => {
-    const lines = part.split('\n').map(l => l.trim()).filter(Boolean);
-    if (lines.length >= 2) {
-      const title = lines[0].replace(/^[#*\s]+/, '');
-      const prompt = lines.find(l => /^prompt|^question|^task/i.test(l))?.replace(/^[^:]+:\s*/, '') || lines[1];
-      const answer = lines.find(l => /^answer|^solution|^expected/i.test(l))?.replace(/^[^:]+:\s*/, '') || lines[lines.length - 1];
-
-      if (prompt && answer) {
-        questions.push({
-          id: idx + 1,
-          ticketId: `INC-AI-${300 + idx + 1}`,
-          title: title || `AI Incident #${idx + 1}`,
-          difficulty: 'Medium',
-          category: answer.toLowerCase().includes('select') ? 'SQL' : 'PowerShell',
-          scenario: prompt,
-          prompt: prompt,
-          hint: 'Verify command parameters and targeted attributes.',
-          starterCode: '-- Write query or command below:\n',
-          expectedQuery: answer,
-          expectedAnswer: answer,
-          explanation: 'Imported troubleshooting scenario.',
-          tags: ['AI-Imported', 'Custom']
-        });
-      }
-    }
-  });
-
-  return questions;
-}
-
-/**
- * Standardize JSON object to Question format
- */
 function standardizeQuestion(item, index) {
   const category = cleanCategory(item.category || item.topic || 'SQL');
   const difficulty = cleanDifficulty(item.difficulty || item.level || 'Medium');
@@ -245,7 +506,7 @@ function standardizeQuestion(item, index) {
     expectedQuery: expectedAnswer,
     expectedAnswer,
     explanation: item.explanation || 'Verified diagnostic procedure.',
-    tags: [category, difficulty, 'AI-Imported'],
+    tags: [category, difficulty, 'Custom-AI'],
     simpleGoal: item.simpleGoal || prompt,
     simplePrompt: prompt,
     simpleSteps: [

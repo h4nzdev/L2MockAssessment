@@ -25,13 +25,14 @@ import {
   Lock
 } from 'lucide-react';
 import { questionBank, difficultyColors } from '../data/questionBank';
-import { initializeDatabase, posDocumentation } from '../data/mockDatabase';
+import { initializeDatabase, posDocumentation, clearCustomDatabase } from '../data/mockDatabase';
 import { validateQuery } from '../utils/sqlValidator';
 import { getStoredApiKey, evaluateAnswerWithGemini } from '../services/geminiService';
 import ResultTable from '../components/ResultTable';
 import SchemaModal from '../components/SchemaModal';
 import QuestionNavigatorModal from '../components/QuestionNavigatorModal';
-import AITemplateModal from '../components/AITemplateModal';
+import ThemeToggle from '../components/ThemeToggle';
+import ssquelLogo from '../assets/ssquel.png';
 
 // Evaluates PowerShell / Network questions outside render scope
 async function evaluateNonSQL({ apiKey, question, userQuery }) {
@@ -90,8 +91,17 @@ export default function AssessmentPage() {
       return null;
     }
   });
-  const [activeBankType, setActiveBankType] = useState('default'); // 'default' | 'ai'
-  const [isAIGeneratorOpen, setIsAIGeneratorOpen] = useState(false);
+  const [activeBankType, setActiveBankType] = useState(() => {
+    try {
+      const stored = localStorage.getItem('support_sql_ai_questions');
+      if (stored && JSON.parse(stored)?.length > 0) return 'ai';
+    } catch {
+      // ignore
+    }
+    return 'default';
+  });
+  const [isCustomDbActive, setIsCustomDbActive] = useState(() => !!localStorage.getItem('support_sql_custom_db_sql'));
+  const [customDbDomain, setCustomDbDomain] = useState(() => localStorage.getItem('support_sql_custom_db_domain') || '');
 
   // Active bank
   const currentBank = (activeBankType === 'ai' && aiQuestions && aiQuestions.length > 0)
@@ -166,19 +176,25 @@ export default function AssessmentPage() {
     setSecondsElapsed(0);
   };
 
-  // Called when AI questions are generated
-  const handleQuestionsGenerated = (questions, domainTitle) => {
-    setAiQuestions(questions);
-    localStorage.setItem('support_sql_ai_questions', JSON.stringify(questions));
-    localStorage.setItem('support_sql_ai_domain', domainTitle);
-    setActiveBankType('ai');
-    setCurrentIndex(0);
-    setUserQuery(questions[0]?.starterCode || '');
-    setExecutionResult(null);
-    setShowHint(false);
-    setIsSolutionRevealed(false);
-    setActiveOutputTab('user');
-    setSecondsElapsed(0);
+  // Revert custom database back to standard Retail POS fleet
+  const handleRevertToDefaultPOS = () => {
+    if (window.confirm('Revert back to the standard Retail POS Fleet database and 40 scenarios?')) {
+      clearCustomDatabase();
+      localStorage.removeItem('support_sql_ai_questions');
+      localStorage.removeItem('support_sql_ai_domain');
+      setAiQuestions(null);
+      setIsCustomDbActive(false);
+      setCustomDbDomain('');
+      setActiveBankType('default');
+      setCurrentIndex(0);
+      setUserQuery(questionBank[0]?.starterCode || '');
+      setExecutionResult(null);
+      setShowHint(false);
+      setIsSolutionRevealed(false);
+      setActiveOutputTab('user');
+      setSecondsElapsed(0);
+      alert('Restored standard Retail POS Fleet database.');
+    }
   };
 
   // Per-Question Timer Tick
@@ -282,30 +298,36 @@ export default function AssessmentPage() {
   const canGoNext = practiceMode || isCurrentSolved;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-blue-600/30 selection:text-sky-200">
-      {/* Top Header in Navy */}
-      <header className="border-b border-blue-950 bg-slate-950/95 sticky top-0 z-30 px-4 sm:px-6 py-2.5 backdrop-blur flex items-center justify-between gap-4">
+    <div className="min-h-screen theme-bg theme-text flex flex-col font-sans selection:bg-blue-400/30">
+      {/* Top Header */}
+      <header className="border-b theme-border bg-[var(--bg-header)] sticky top-0 z-30 px-4 sm:px-6 py-2.5 backdrop-blur flex items-center justify-between gap-4">
         {/* Left: Brand & Question Tracker */}
         <div className="flex items-center gap-2.5">
           <button
             onClick={() => navigate('/')}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-800 bg-slate-900/80 hover:bg-slate-800 text-slate-400 hover:text-slate-200 text-xs font-mono transition-colors"
-            title="Return to Home"
+            className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border theme-border bg-[var(--bg-surface)] hover:bg-[var(--bg-surface2)] theme-text-muted hover:theme-text text-xs font-mono transition-colors"
+            title="Return to SSEQUEL Home"
           >
-            <ArrowLeft className="w-3.5 h-3.5" />
+            <img
+              src={ssquelLogo}
+              alt="SSEQUEL Logo"
+              className="w-5 h-5 rounded-md object-contain bg-blue-600 p-0.5"
+            />
+            <span className="font-bold theme-text tracking-tight hidden md:inline">SSEQUEL</span>
+            <ArrowLeft className="w-3.5 h-3.5 ml-0.5" />
             <span className="hidden sm:inline">Exit</span>
           </button>
 
-          <div className="h-4 w-px bg-blue-950 hidden sm:block" />
+          <div className="h-4 w-px bg-[var(--border-muted)] hidden sm:block" />
 
           {/* Active Bank Switcher */}
-          <div className="flex items-center rounded-lg bg-blue-950/60 p-0.5 border border-blue-900/60 text-xs font-mono">
+          <div className="flex items-center rounded-lg bg-[var(--bg-surface2)] p-0.5 border theme-border-m text-xs font-mono">
             <button
               onClick={() => handleSwitchBank('default')}
               className={`px-2.5 py-1 rounded-md transition-all ${
                 activeBankType === 'default'
-                  ? 'bg-blue-900 text-sky-200 font-semibold shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-blue-600 text-white font-semibold shadow-sm dark:bg-blue-900 dark:text-sky-200'
+                  : 'theme-text-muted hover:theme-text-sec'
               }`}
             >
               POS Fleet (40)
@@ -315,8 +337,8 @@ export default function AssessmentPage() {
                 onClick={() => handleSwitchBank('ai')}
                 className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1 ${
                   activeBankType === 'ai'
-                    ? 'bg-blue-900 text-sky-200 font-semibold shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'bg-blue-600 text-white font-semibold shadow-sm dark:bg-blue-900 dark:text-sky-200'
+                    : 'theme-text-muted hover:theme-text-sec'
                 }`}
               >
                 <Sparkles className="w-3 h-3 text-sky-400" />
@@ -350,15 +372,30 @@ export default function AssessmentPage() {
 
         {/* Right: Actions */}
         <div className="flex items-center gap-2">
-          {/* AI Questions & TXT Upload Button */}
+          {/* Custom DB Indicator if Active */}
+          {isCustomDbActive && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/70 border border-emerald-500/40 text-xs font-mono text-emerald-300">
+              <Database className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden md:inline font-semibold">{customDbDomain ? customDbDomain.substring(0, 16) : 'Custom DB'}</span>
+              <button
+                onClick={handleRevertToDefaultPOS}
+                className="ml-1 px-1.5 py-0.5 rounded bg-emerald-900/60 hover:bg-emerald-800/80 text-[10px] text-emerald-200 transition-colors"
+                title="Revert back to standard Retail POS Fleet database"
+              >
+                Revert POS
+              </button>
+            </div>
+          )}
+
+          {/* Custom Assessment & Mock DB Builder */}
           <button
-            onClick={() => setIsAIGeneratorOpen(true)}
+            onClick={() => navigate('/builder')}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-800/80 bg-blue-950/50 hover:bg-blue-900/50 text-sky-300 text-xs font-mono transition-all shadow-sm"
-            title="Generate with Gemini API or Upload .txt File (No API Key)"
+            title="Custom Assessment & Mock Database Builder (Upload .txt or Gemini API)"
           >
             <Sparkles className="w-3.5 h-3.5 text-sky-400" />
-            <span className="hidden sm:inline">AI Questions / Upload .txt</span>
-            <span className="sm:hidden">AI / .txt</span>
+            <span className="hidden sm:inline">Custom Builder & .txt</span>
+            <span className="sm:hidden">Builder</span>
           </button>
 
           {/* Question Navigator */}
@@ -376,30 +413,32 @@ export default function AssessmentPage() {
           {/* Documentation & Runbook Explorer */}
           <button
             onClick={() => handleOpenDocumentation()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-900/60 bg-blue-950/60 hover:bg-blue-900/60 text-sky-300 text-xs font-mono transition-colors shadow-sm"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 dark:text-sky-300 text-xs font-mono transition-colors shadow-sm"
             title="Inspect POS Architecture & SOP Runbooks"
           >
-            <Eye className="w-3.5 h-3.5 text-sky-400" />
+            <Eye className="w-3.5 h-3.5 text-blue-500 dark:text-sky-400" />
             <span className="hidden sm:inline">Documentation</span>
           </button>
 
           {/* Schema Explorer */}
           <button
             onClick={() => setIsSchemaOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900/80 hover:bg-slate-800 text-slate-300 text-xs font-mono transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border theme-border bg-[var(--bg-surface)] hover:bg-[var(--bg-surface2)] theme-text-sec text-xs font-mono transition-colors"
           >
-            <Database className="w-3.5 h-3.5 text-sky-400" />
+            <Database className="w-3.5 h-3.5 text-blue-500 dark:text-sky-400" />
             <span className="hidden sm:inline">Schema</span>
           </button>
 
           {/* Reset DB */}
           <button
             onClick={handleResetDatabase}
-            className="p-1.5 rounded-lg border border-slate-800 bg-slate-900/80 hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
+            className="p-1.5 rounded-lg border theme-border bg-[var(--bg-surface)] hover:bg-[var(--bg-surface2)] theme-text-muted transition-colors"
             title="Reset Mock AlaSQL Database"
           >
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
+
+          <ThemeToggle />
         </div>
       </header>
 
@@ -407,29 +446,29 @@ export default function AssessmentPage() {
       <div className="flex-1 flex flex-col p-3 sm:p-4 gap-3 max-w-[1700px] w-full mx-auto overflow-hidden">
         
         {/* Question & Business Scenario Panel (Top) */}
-        <section className="rounded-2xl border border-blue-900/60 bg-gradient-to-b from-slate-900/90 via-slate-950/95 to-slate-950 p-4 sm:p-5 shadow-2xl space-y-3">
+        <section className="rounded-2xl border theme-border bg-[var(--bg-card)] dark:bg-gradient-to-b dark:from-slate-900/90 dark:via-slate-950/95 dark:to-slate-950 p-4 sm:p-5 shadow-xl space-y-3">
           {/* Top ITSM Meta Ribbon */}
-          <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-blue-950">
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b theme-border-m">
             <div className="flex items-center flex-wrap gap-2">
               {/* Ticket ID & Live Beacon */}
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-950/80 border border-blue-800/80 text-xs font-mono shadow-sm">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/80 border border-blue-200 dark:border-blue-800/80 text-xs font-mono shadow-sm">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                 </span>
-                <span className="text-slate-400 font-semibold">TICKET</span>
-                <span className="text-sky-300 font-bold">{currentQuestion.ticketId || `INC-${currentQuestion.id}`}</span>
+                <span className="text-slate-500 dark:text-slate-400 font-semibold">TICKET</span>
+                <span className="text-blue-700 dark:text-sky-300 font-bold">{currentQuestion.ticketId || `INC-${currentQuestion.id}`}</span>
               </div>
 
-              {/* Priority Badge */}
+              {/* Priority Badge - keep severity colors (rose/amber/blue) */}
               <span className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold border ${
                 currentQuestion.difficulty === 'Advanced' || currentQuestion.category === 'Network'
-                  ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                  ? 'bg-rose-500/15 text-rose-700 border-rose-400/40 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-500/40'
                   : currentQuestion.difficulty === 'Intermediate' || currentQuestion.category === 'PowerShell'
-                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                  ? 'bg-amber-500/15 text-amber-700 border-amber-400/40 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/40'
                   : currentQuestion.difficulty === 'Medium'
-                  ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
-                  : 'bg-blue-500/20 text-sky-300 border-blue-500/40'
+                  ? 'bg-amber-500/10 text-amber-600 border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-500/30'
+                  : 'bg-blue-100 text-blue-700 border-blue-300/60 dark:bg-blue-500/20 dark:text-sky-300 dark:border-blue-500/40'
               }`}>
                 {currentQuestion.difficulty === 'Advanced' ? 'P1 - CRITICAL' :
                  currentQuestion.difficulty === 'Intermediate' ? 'P2 - HIGH' :
@@ -437,13 +476,13 @@ export default function AssessmentPage() {
               </span>
 
               {/* Status */}
-              <span className="px-2 py-0.5 rounded-md bg-blue-900/40 text-blue-200 border border-blue-700/50 text-[10px] font-mono font-semibold uppercase">
+              <span className="px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-200 border border-blue-200 dark:border-blue-700/50 text-[10px] font-mono font-semibold uppercase">
                 OPEN • L2 Escalation
               </span>
 
               {/* Reporter & Assignee (Desktop) */}
-              <span className="hidden md:inline-flex items-center gap-1 text-[11px] text-slate-400 font-mono">
-                <span className="text-slate-500">Assignee:</span> <strong className="text-slate-200">L2 Store Systems (You)</strong>
+              <span className="hidden md:inline-flex items-center gap-1 text-[11px] theme-text-muted font-mono">
+                <span className="theme-text-muted">Assignee:</span> <strong className="theme-text-sec">L2 Store Systems (You)</strong>
               </span>
               <span className="hidden xl:inline-flex items-center gap-1 text-[11px] text-slate-400 font-mono">
                 <span className="text-slate-500">SLA:</span> <span className="text-amber-400">&lt; 15 min</span>
@@ -617,17 +656,17 @@ export default function AssessmentPage() {
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-3 min-h-[460px]">
           
           {/* Left Panel: Query/Command Editor */}
-          <div className="flex flex-col rounded-2xl border border-blue-950 bg-slate-900/80 overflow-hidden shadow-xl">
+          <div className="flex flex-col rounded-2xl border theme-border bg-[var(--bg-surface)] overflow-hidden shadow-xl">
             {/* Editor Subheader */}
-            <div className="flex items-center justify-between px-3 py-2 bg-slate-950 border-b border-blue-950 text-xs">
+            <div className="flex items-center justify-between px-3 py-2 bg-[var(--bg-surface2)] border-b theme-border-m text-xs">
               <div className="flex items-center gap-2">
-                <Code2 className="w-4 h-4 text-sky-400" />
-                <span className="font-semibold text-slate-200 font-mono">
+                <Code2 className="w-4 h-4 text-blue-500 dark:text-sky-400" />
+                <span className="font-semibold theme-text font-mono">
                   {currentQuestion.category === 'PowerShell' ? 'PowerShell Terminal Script' :
                    currentQuestion.category === 'Network Troubleshooting' ? 'Network Command Console' :
                    'SQL Query Editor'}
                 </span>
-                <span className="text-[10px] font-mono text-sky-300 px-1.5 py-0.5 rounded bg-blue-950 border border-blue-800/60">
+                <span className="text-[10px] font-mono text-blue-700 dark:text-sky-300 px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-950 border border-blue-200 dark:border-blue-800/60">
                   {currentQuestion.category || 'AlaSQL Dialect'}
                 </span>
               </div>
@@ -635,7 +674,7 @@ export default function AssessmentPage() {
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={() => setUserQuery(currentQuestion.starterCode || '')}
-                  className="flex items-center gap-1 px-2 py-1 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 text-[11px] font-mono transition-colors"
+                  className="flex items-center gap-1 px-2 py-1 rounded hover:bg-[var(--bg-surface2)] theme-text-muted hover:theme-text-sec text-[11px] font-mono transition-colors"
                   title="Reset to clean template"
                 >
                   <RotateCcw className="w-3 h-3" />
@@ -644,23 +683,23 @@ export default function AssessmentPage() {
 
                 <button
                   onClick={handleCopy}
-                  className="flex items-center gap-1 px-2 py-1 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 text-[11px] font-mono transition-colors"
+                  className="flex items-center gap-1 px-2 py-1 rounded hover:bg-[var(--bg-surface2)] theme-text-muted hover:theme-text-sec text-[11px] font-mono transition-colors"
                   title="Copy code"
                 >
-                  {copied ? <Check className="w-3 h-3 text-sky-400" /> : <Copy className="w-3 h-3" />}
+                  {copied ? <Check className="w-3 h-3 text-blue-500 dark:text-sky-400" /> : <Copy className="w-3 h-3" />}
                   <span className="hidden sm:inline">{copied ? 'Copied' : 'Copy'}</span>
                 </button>
               </div>
             </div>
 
             {/* Keyword / Cmdlet Helper Bar */}
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950/80 border-b border-blue-950/80 overflow-x-auto text-[11px] font-mono scrollbar-none">
-              <span className="text-slate-400 text-[10px] mr-1 uppercase">Snippets:</span>
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--bg-surface2)] border-b theme-border-m overflow-x-auto text-[11px] font-mono scrollbar-none">
+              <span className="theme-text-muted text-[10px] mr-1 uppercase">Snippets:</span>
               {getSnippets().map(kw => (
                 <button
                   key={kw}
                   onClick={() => handleInsertKeyword(kw)}
-                  className="px-2 py-0.5 rounded bg-blue-950/60 hover:bg-blue-900/60 text-sky-300 border border-blue-800/60 transition-colors whitespace-nowrap active:scale-95"
+                  className="px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-950/60 hover:bg-blue-200 dark:hover:bg-blue-900/60 text-blue-700 dark:text-sky-300 border border-blue-200 dark:border-blue-800/60 transition-colors whitespace-nowrap active:scale-95"
                 >
                   {kw}
                 </button>
@@ -668,7 +707,7 @@ export default function AssessmentPage() {
             </div>
 
             {/* Textarea Editor */}
-            <div className="flex-1 relative flex bg-slate-950 font-mono text-xs sm:text-sm">
+            <div className="flex-1 relative flex bg-[var(--bg-input)] dark:bg-slate-950 font-mono text-xs sm:text-sm">
               <textarea
                 ref={textareaRef}
                 value={userQuery}
@@ -682,39 +721,39 @@ export default function AssessmentPage() {
                     : '-- Write your SQL query here...\nSELECT * FROM Stores;'
                 }
                 spellCheck={false}
-                className="w-full h-full p-4 bg-transparent text-slate-100 font-mono resize-none focus:outline-none focus:ring-1 focus:ring-blue-500/50 leading-relaxed placeholder:text-slate-600"
+                className="w-full h-full p-4 bg-transparent theme-text font-mono resize-none focus:outline-none focus:ring-1 focus:ring-blue-500/50 leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-600"
               />
             </div>
 
             {/* Editor Footer */}
-            <div className="flex items-center justify-between px-3 py-2 bg-slate-950 border-t border-blue-950 text-xs text-slate-400">
+            <div className="flex items-center justify-between px-3 py-2 bg-[var(--bg-surface2)] border-t theme-border-m text-xs theme-text-muted">
               <span className="flex items-center gap-1.5 text-[11px]">
-                <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-sky-300 font-mono text-[10px]">
+                <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-blue-700 dark:text-sky-300 font-mono text-[10px]">
                   Ctrl + Enter
                 </kbd>
-                <span>to execute & validate</span>
+                <span>to execute &amp; validate</span>
               </span>
 
-              <span className="text-[11px] font-mono text-slate-400">
+              <span className="text-[11px] font-mono theme-text-muted">
                 {userQuery.length} chars
               </span>
             </div>
           </div>
 
           {/* Right Panel: Output & Validation Results */}
-          <div className="flex flex-col rounded-2xl border border-blue-950 bg-slate-900/80 overflow-hidden shadow-xl">
+          <div className="flex flex-col rounded-2xl border theme-border bg-[var(--bg-surface)] overflow-hidden shadow-xl">
             {/* Output Subheader & Tab Switcher */}
-            <div className="flex items-center justify-between px-3 py-2 bg-slate-950 border-b border-blue-950 text-xs">
-              <div className="flex items-center gap-1 rounded-lg bg-slate-900 border border-blue-950 p-0.5">
+            <div className="flex items-center justify-between px-3 py-2 bg-[var(--bg-surface2)] border-b theme-border-m text-xs">
+              <div className="flex items-center gap-1 rounded-lg bg-[var(--bg-base)] border theme-border-m p-0.5">
                 <button
                   onClick={() => setActiveOutputTab('user')}
                   className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-mono text-xs transition-colors ${
                     activeOutputTab === 'user'
-                      ? 'bg-blue-900 text-sky-200 font-semibold shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200'
+                      ? 'bg-blue-600 text-white font-semibold shadow-sm dark:bg-blue-900 dark:text-sky-200'
+                      : 'theme-text-muted hover:theme-text-sec'
                   }`}
                 >
-                  <Database className="w-3.5 h-3.5 text-sky-400" />
+                  <Database className="w-3.5 h-3.5 text-current dark:text-sky-400" />
                   Execution Result
                 </button>
 
@@ -722,11 +761,11 @@ export default function AssessmentPage() {
                   onClick={() => setActiveOutputTab('expected')}
                   className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-mono text-xs transition-colors ${
                     activeOutputTab === 'expected'
-                      ? 'bg-blue-900 text-sky-200 font-semibold shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200'
+                      ? 'bg-blue-600 text-white font-semibold shadow-sm dark:bg-blue-900 dark:text-sky-200'
+                      : 'theme-text-muted hover:theme-text-sec'
                   }`}
                 >
-                  <Eye className="w-3.5 h-3.5 text-sky-400" />
+                  <Eye className="w-3.5 h-3.5 text-current dark:text-sky-400" />
                   Expected Solution
                 </button>
               </div>
@@ -844,7 +883,7 @@ export default function AssessmentPage() {
             })()}
 
             {/* Output Display Body */}
-            <div className="flex-1 p-3 overflow-y-auto bg-slate-950/60">
+            <div className="flex-1 p-3 overflow-y-auto bg-[var(--bg-base)] dark:bg-slate-950/60">
               {activeOutputTab === 'user' ? (
                 <ResultTable
                   data={executionResult?.userResult}
@@ -857,47 +896,47 @@ export default function AssessmentPage() {
                 /* Expected Solution Tab */
                 <div className="space-y-3">
                   {!isSolutionRevealed && !isCurrentSolved ? (
-                    <div className="p-6 rounded-xl border border-blue-950 bg-slate-900/60 text-center flex flex-col items-center justify-center">
-                      <div className="w-10 h-10 rounded-xl bg-amber-950/40 border border-amber-800/40 flex items-center justify-center text-amber-400 mb-2.5">
+                    <div className="p-6 rounded-xl border theme-border bg-[var(--bg-card)] text-center flex flex-col items-center justify-center">
+                      <div className="w-10 h-10 rounded-xl bg-amber-500/10 dark:bg-amber-950/40 border border-amber-400/30 dark:border-amber-800/40 flex items-center justify-center text-amber-500 dark:text-amber-400 mb-2.5">
                         <Lock className="w-5 h-5" />
                       </div>
-                      <h4 className="text-slate-200 font-semibold text-sm mb-1">
+                      <h4 className="theme-text font-semibold text-sm mb-1">
                         Solution Hidden (Practice Active)
                       </h4>
-                      <p className="text-slate-400 text-xs max-w-sm mb-4">
+                      <p className="theme-text-muted text-xs max-w-sm mb-4">
                         Attempt to write and execute your query or command first. If you need help, you can reveal the benchmark solution below.
                       </p>
                       <button
                         onClick={() => setIsSolutionRevealed(true)}
-                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 text-white border border-blue-400/40 text-xs font-mono font-medium transition-all active:scale-95 shadow-lg shadow-blue-950/60"
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 text-white border border-blue-400/40 text-xs font-mono font-medium transition-all active:scale-95 shadow-lg"
                       >
                         <Eye className="w-4 h-4" />
                         <span>Reveal Solution</span>
                       </button>
                     </div>
                   ) : (
-                    <div className="p-3 rounded-xl bg-slate-900/90 border border-blue-950 text-xs">
+                    <div className="p-3 rounded-xl bg-[var(--bg-card)] border theme-border text-xs">
                       <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-slate-200 font-mono font-semibold flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-sky-400" />
+                        <span className="theme-text font-mono font-semibold flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-blue-500 dark:text-sky-400" />
                           Target Benchmark Solution:
                         </span>
                         {!isCurrentSolved && (
                           <button
                             onClick={() => setIsSolutionRevealed(false)}
-                            className="flex items-center gap-1 text-[11px] font-mono text-slate-400 hover:text-slate-200 transition-colors"
+                            className="flex items-center gap-1 text-[11px] font-mono theme-text-muted hover:theme-text-sec transition-colors"
                           >
                             <EyeOff className="w-3 h-3" />
                             Hide Query
                           </button>
                         )}
                       </div>
-                      <pre className="p-2.5 rounded-lg bg-black/60 border border-blue-950 font-mono text-sky-300 whitespace-pre-wrap text-xs">
+                      <pre className="p-2.5 rounded-lg bg-[var(--bg-code)] border theme-border-m font-mono text-blue-700 dark:text-sky-300 whitespace-pre-wrap text-xs">
                         {currentQuestion.expectedAnswer || currentQuestion.expectedQuery}
                       </pre>
                       {currentQuestion.explanation && (
-                        <p className="mt-2 text-slate-400 text-xs leading-relaxed border-t border-blue-950 pt-2">
-                          <strong className="text-sky-300">Technical Rationale: </strong>
+                        <p className="mt-2 theme-text-muted text-xs leading-relaxed border-t theme-border-m pt-2">
+                          <strong className="text-blue-600 dark:text-sky-300">Technical Rationale: </strong>
                           {currentQuestion.explanation}
                         </p>
                       )}
@@ -918,12 +957,12 @@ export default function AssessmentPage() {
         </div>
 
         {/* Footer / Navigation Bar */}
-        <footer className="rounded-2xl border border-blue-950 bg-slate-900/90 p-3 sm:px-5 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl">
+        <footer className="rounded-2xl border theme-border bg-[var(--bg-surface)] p-3 sm:px-5 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl">
           {/* Left: Exit Assessment & Practice Unlock Toggle */}
           <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
             <button
               onClick={() => navigate('/')}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 text-xs font-mono transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border theme-border bg-[var(--bg-surface)] hover:bg-[var(--bg-surface2)] theme-text-muted text-xs font-mono transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Exit Assessment</span>
@@ -933,8 +972,8 @@ export default function AssessmentPage() {
               onClick={() => setPracticeMode(!practiceMode)}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-mono border transition-all ${
                 practiceMode
-                  ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
-                  : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-300'
+                  ? 'bg-amber-500/10 text-amber-600 dark:text-amber-300 border-amber-400/40 dark:border-amber-500/30'
+                  : 'bg-[var(--bg-surface)] theme-text-muted border-[var(--border-base)] hover:theme-text-sec'
               }`}
               title="Practice Mode allows jumping to the next question without strictly passing"
             >
@@ -954,10 +993,10 @@ export default function AssessmentPage() {
                   onClick={() => handleSelectQuestion(idx)}
                   className={`w-2.5 h-2.5 rounded-full transition-all ${
                     isCurrent
-                      ? 'bg-sky-400 ring-2 ring-blue-500/60 scale-125'
+                      ? 'bg-blue-500 ring-2 ring-blue-400/60 scale-125'
                       : isSolved
                       ? 'bg-blue-600'
-                      : 'bg-slate-700 hover:bg-slate-500'
+                      : 'bg-slate-300 dark:bg-slate-700 hover:bg-slate-400 dark:hover:bg-slate-500'
                   }`}
                   title={`Question ${q.id}: ${q.title} (${isSolved ? 'Solved' : 'Unsolved'})`}
                 />
@@ -971,7 +1010,7 @@ export default function AssessmentPage() {
             <button
               onClick={() => handleSelectQuestion(currentIndex - 1)}
               disabled={currentIndex === 0}
-              className="flex items-center gap-1 px-3.5 py-2 rounded-xl border border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-mono transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+              className="flex items-center gap-1 px-3.5 py-2 rounded-xl border theme-border bg-[var(--bg-surface)] hover:bg-[var(--bg-surface2)] theme-text-sec text-xs font-mono transition-all disabled:opacity-30 disabled:cursor-not-allowed"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Previous</span>
@@ -981,7 +1020,7 @@ export default function AssessmentPage() {
             <button
               onClick={handleCheckAnswer}
               disabled={isValidating}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 text-white font-bold text-xs font-mono shadow-lg shadow-blue-900/40 border border-blue-400/40 active:scale-95 transition-all disabled:opacity-50"
+              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 text-white font-bold text-xs font-mono shadow-lg border border-blue-400/40 active:scale-95 transition-all disabled:opacity-50"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
               <span>{isValidating ? 'Validating...' : 'Check Answer'}</span>
@@ -993,8 +1032,8 @@ export default function AssessmentPage() {
               disabled={currentIndex === currentBank.length - 1 || !canGoNext}
               className={`flex items-center gap-1 px-4 py-2 rounded-xl border text-xs font-mono transition-all ${
                 canGoNext
-                  ? 'border-blue-600/50 bg-blue-950/80 text-sky-200 hover:bg-blue-900/60'
-                  : 'border-slate-800 bg-slate-900 text-slate-500 opacity-40 cursor-not-allowed'
+                  ? 'border-blue-400 bg-blue-100 text-blue-700 hover:bg-blue-200 dark:border-blue-600/50 dark:bg-blue-950/80 dark:text-sky-200 dark:hover:bg-blue-900/60'
+                  : 'border-[var(--border-muted)] bg-[var(--bg-surface)] text-[var(--text-muted)] opacity-40 cursor-not-allowed'
               }`}
               title={canGoNext ? "Advance to Next Question" : "Solve this question or enable Practice Unlock to proceed"}
             >
@@ -1018,12 +1057,6 @@ export default function AssessmentPage() {
         onSelectQuestion={(idx) => handleSelectQuestion(idx)}
         completedMap={completedQuestions}
         questions={currentBank}
-      />
-
-      <AITemplateModal
-        isOpen={isAIGeneratorOpen}
-        onClose={() => setIsAIGeneratorOpen(false)}
-        onQuestionsGenerated={handleQuestionsGenerated}
       />
     </div>
   );

@@ -442,9 +442,45 @@ export function initializeDatabase() {
     alasql.tables.Transactions.data = JSON.parse(JSON.stringify(mockTransactions));
     alasql.tables.ErrorLogs.data = JSON.parse(JSON.stringify(mockErrorLogs));
 
+    // If custom database SQL is stored, execute it on top
+    const customSql = localStorage.getItem('support_sql_custom_db_sql');
+    if (customSql) {
+      const stmts = customSql.split(';').map(s => s.trim()).filter(s => s.length > 5);
+      stmts.forEach(stmt => {
+        try {
+          alasql(stmt + ';');
+        } catch (e) {
+          console.warn('Custom SQL load warning:', e.message);
+        }
+      });
+    }
+
     return { success: true, message: 'Database initialized successfully' };
   } catch (error) {
     console.error('Failed to initialize AlaSQL database:', error);
     return { success: false, error: error.message };
   }
+}
+
+export function applyCustomDatabase(customSql) {
+  try {
+    if (!customSql || !customSql.trim()) return { success: false, error: 'Empty SQL string.' };
+    
+    const stmts = customSql.split(';').map(s => s.trim()).filter(s => s.length > 5);
+    stmts.forEach(stmt => {
+      alasql(stmt + ';');
+    });
+
+    localStorage.setItem('support_sql_custom_db_sql', customSql);
+    return { success: true };
+  } catch (err) {
+    console.error('Failed to apply custom database:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+export function clearCustomDatabase() {
+  localStorage.removeItem('support_sql_custom_db_sql');
+  localStorage.removeItem('support_sql_custom_db_schema');
+  return initializeDatabase();
 }

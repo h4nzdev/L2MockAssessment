@@ -16,6 +16,8 @@ import {
   Sparkles
 } from 'lucide-react';
 import { posDocumentation, mockDatabaseSchema } from '../data/mockDatabase';
+import ThemeToggle from '../components/ThemeToggle';
+import ssquelLogo from '../assets/ssquel.png';
 
 export default function DocumentationPage() {
   const navigate = useNavigate();
@@ -44,14 +46,14 @@ export default function DocumentationPage() {
   const getSeverityBadge = (severity) => {
     switch (severity) {
       case 'FATAL':
-        return <span className="px-2.5 py-1 rounded-md text-xs font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">FATAL</span>;
+        return <span className="px-2.5 py-1 rounded-md text-xs font-mono font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-400/40 dark:border-rose-500/40">FATAL</span>;
       case 'CRITICAL':
-        return <span className="px-2.5 py-1 rounded-md text-xs font-mono font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30">CRITICAL</span>;
+        return <span className="px-2.5 py-1 rounded-md text-xs font-mono font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-400/30 dark:border-rose-500/30">CRITICAL</span>;
       case 'WARN':
-        return <span className="px-2.5 py-1 rounded-md text-xs font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">WARN</span>;
+        return <span className="px-2.5 py-1 rounded-md text-xs font-mono font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-400/40 dark:border-amber-500/40">WARN</span>;
       case 'INFO':
       default:
-        return <span className="px-2.5 py-1 rounded-md text-xs font-mono font-bold bg-blue-500/20 text-sky-300 border border-blue-500/40">INFO</span>;
+        return <span className="px-2.5 py-1 rounded-md text-xs font-mono font-bold bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-sky-300 border border-blue-300 dark:border-blue-500/40">INFO</span>;
     }
   };
 
@@ -68,62 +70,67 @@ export default function DocumentationPage() {
   });
 
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-100 flex flex-col font-sans selection:bg-blue-600/30">
+    <div className="min-h-screen theme-bg theme-text flex flex-col font-sans selection:bg-blue-400/30">
       
       {/* Top Navigation Bar */}
-      <header className="sticky top-0 z-40 border-b border-blue-950/80 bg-slate-950/90 backdrop-blur-md px-6 py-4">
+      <header className="sticky top-0 z-40 border-b theme-border bg-[var(--bg-header)] backdrop-blur-md px-6 py-4">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           
           {/* Left: Back button & Title */}
           <div className="flex items-center gap-4 w-full sm:w-auto">
             <button
               onClick={() => navigate('/assessment')}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-blue-900/60 bg-blue-950/50 hover:bg-blue-900/60 text-sky-300 text-xs font-mono transition-all shadow-sm active:scale-95 shrink-0"
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-700 dark:text-sky-300 text-xs font-mono transition-all shadow-sm active:scale-95 shrink-0"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Back to Assessment</span>
             </button>
 
-            <div className="h-6 w-px bg-blue-950 hidden sm:block" />
+            <div className="h-6 w-px bg-[var(--border-muted)] hidden sm:block" />
 
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-blue-950 border border-blue-800/80 text-sky-400 shadow-inner shrink-0">
-                <Eye className="w-5 h-5 text-sky-300" />
-              </div>
+              <img
+                src={ssquelLogo}
+                alt="SSEQUEL Logo"
+                className="w-10 h-10 rounded-xl object-contain bg-gradient-to-br from-blue-600 to-indigo-800 p-0.5 shadow-lg border border-blue-500/30 shrink-0"
+              />
               <div>
                 <div className="flex items-center gap-2">
-                  <h1 className="text-base sm:text-lg font-bold text-white tracking-tight">
-                    POS Documentation & L2 Runbook
+                  <h1 className="text-base sm:text-lg font-bold theme-text tracking-tight">
+                    SSEQUEL <span className="font-normal text-sm sm:text-base opacity-90">POS Documentation &amp; L2 Runbook</span>
                   </h1>
-                  <span className="hidden md:inline-block px-2 py-0.5 rounded bg-blue-900/60 text-sky-300 text-[10px] font-mono uppercase border border-blue-700/60">
+                  <span className="hidden md:inline-block px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-sky-300 text-[10px] font-mono uppercase border border-blue-200 dark:border-blue-700/60">
                     KB-POS-2026
                   </span>
                 </div>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs theme-text-muted">
                   Standard Operating Procedures, Error Code Index, and Architecture Fleet Guide
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Right: Search Box */}
-          <div className="relative w-full sm:w-80">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              placeholder="Search error codes, models, SQL..."
-              className="w-full pl-10 pr-8 py-2 rounded-xl bg-slate-900/90 border border-blue-950 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 font-mono shadow-inner"
-            />
-            {searchTerm && (
-              <button
-                onClick={() => handleSearchChange('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs font-mono"
-              >
-                Clear
-              </button>
-            )}
+          {/* Right: Search Box + ThemeToggle */}
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="relative flex-1 sm:w-80">
+              <Search className="w-4 h-4 theme-text-muted absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                placeholder="Search error codes, models, SQL..."
+                className="w-full pl-10 pr-8 py-2 rounded-xl bg-[var(--bg-input)] border theme-border theme-text text-xs placeholder:text-[var(--text-muted)] focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono shadow-inner"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => handleSearchChange('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 theme-text-muted hover:theme-text-sec text-xs font-mono"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <ThemeToggle />
           </div>
         </div>
       </header>
@@ -132,16 +139,16 @@ export default function DocumentationPage() {
       <main className="flex-1 max-w-7xl w-full mx-auto p-6 sm:p-10 space-y-8">
         
         {/* Category Navigation Tabs */}
-        <div className="flex items-center gap-2 border-b border-blue-950/80 pb-3 overflow-x-auto text-xs font-mono">
+        <div className="flex items-center gap-2 border-b theme-border-m pb-3 overflow-x-auto text-xs font-mono">
           <button
             onClick={() => setActiveTab('errors')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border transition-all ${
               activeTab === 'errors'
-                ? 'bg-blue-900/70 text-sky-200 border-blue-600 shadow-md font-semibold'
-                : 'bg-slate-950 border-blue-950 text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                ? 'bg-blue-600 text-white border-blue-500 shadow-md font-semibold dark:bg-blue-900/70 dark:text-sky-200 dark:border-blue-600'
+                : 'bg-[var(--bg-card)] border-[var(--border-base)] theme-text-muted hover:theme-text-sec hover:bg-[var(--bg-surface2)]'
             }`}
           >
-            <ShieldAlert className="w-4 h-4 text-sky-400" />
+            <ShieldAlert className="w-4 h-4 text-current dark:text-sky-400" />
             <span>Error Codes & SOP ({posDocumentation.errorCodes?.length || 0})</span>
           </button>
 
@@ -149,23 +156,23 @@ export default function DocumentationPage() {
             onClick={() => setActiveTab('architecture')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border transition-all ${
               activeTab === 'architecture'
-                ? 'bg-blue-900/70 text-sky-200 border-blue-600 shadow-md font-semibold'
-                : 'bg-slate-950 border-blue-950 text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                ? 'bg-blue-600 text-white border-blue-500 shadow-md font-semibold dark:bg-blue-900/70 dark:text-sky-200 dark:border-blue-600'
+                : 'bg-[var(--bg-card)] border-[var(--border-base)] theme-text-muted hover:theme-text-sec hover:bg-[var(--bg-surface2)]'
             }`}
           >
-            <Network className="w-4 h-4 text-sky-400" />
-            <span>POS Architecture & Subnets</span>
+            <Network className="w-4 h-4 text-current dark:text-sky-400" />
+            <span>POS Architecture &amp; Subnets</span>
           </button>
 
           <button
             onClick={() => setActiveTab('fleet')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border transition-all ${
               activeTab === 'fleet'
-                ? 'bg-blue-900/70 text-sky-200 border-blue-600 shadow-md font-semibold'
-                : 'bg-slate-950 border-blue-950 text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                ? 'bg-blue-600 text-white border-blue-500 shadow-md font-semibold dark:bg-blue-900/70 dark:text-sky-200 dark:border-blue-600'
+                : 'bg-[var(--bg-card)] border-[var(--border-base)] theme-text-muted hover:theme-text-sec hover:bg-[var(--bg-surface2)]'
             }`}
           >
-            <Cpu className="w-4 h-4 text-sky-400" />
+            <Cpu className="w-4 h-4 text-current dark:text-sky-400" />
             <span>Hardware Terminal Fleet</span>
           </button>
 
@@ -173,11 +180,11 @@ export default function DocumentationPage() {
             onClick={() => setActiveTab('sop')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border transition-all ${
               activeTab === 'sop'
-                ? 'bg-blue-900/70 text-sky-200 border-blue-600 shadow-md font-semibold'
-                : 'bg-slate-950 border-blue-950 text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                ? 'bg-blue-600 text-white border-blue-500 shadow-md font-semibold dark:bg-blue-900/70 dark:text-sky-200 dark:border-blue-600'
+                : 'bg-[var(--bg-card)] border-[var(--border-base)] theme-text-muted hover:theme-text-sec hover:bg-[var(--bg-surface2)]'
             }`}
           >
-            <FileText className="w-4 h-4 text-sky-400" />
+            <FileText className="w-4 h-4 text-current dark:text-sky-400" />
             <span>Standard Operating Procedures</span>
           </button>
 
@@ -185,11 +192,11 @@ export default function DocumentationPage() {
             onClick={() => setActiveTab('schema')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border transition-all ${
               activeTab === 'schema'
-                ? 'bg-blue-900/70 text-sky-200 border-blue-600 shadow-md font-semibold'
-                : 'bg-slate-950 border-blue-950 text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                ? 'bg-blue-600 text-white border-blue-500 shadow-md font-semibold dark:bg-blue-900/70 dark:text-sky-200 dark:border-blue-600'
+                : 'bg-[var(--bg-card)] border-[var(--border-base)] theme-text-muted hover:theme-text-sec hover:bg-[var(--bg-surface2)]'
             }`}
           >
-            <Database className="w-4 h-4 text-sky-400" />
+            <Database className="w-4 h-4 text-current dark:text-sky-400" />
             <span>Database Data Dictionary</span>
           </button>
         </div>
@@ -199,14 +206,14 @@ export default function DocumentationPage() {
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-bold text-white tracking-tight">
-                  POS Incident Error Codes & Triage Procedures
+                <h2 className="text-xl font-bold theme-text tracking-tight">
+                  POS Incident Error Codes &amp; Triage Procedures
                 </h2>
-                <p className="text-sm text-slate-400 mt-1">
+                <p className="text-sm theme-text-muted mt-1">
                   Each incident code includes observed hardware/network symptoms, standard L2 resolution steps, and an instant diagnostic SQL check.
                 </p>
               </div>
-              <span className="text-xs font-mono text-slate-500 bg-slate-900 px-3 py-1.5 rounded-lg border border-blue-950">
+              <span className="text-xs font-mono theme-text-muted bg-[var(--bg-card)] px-3 py-1.5 rounded-lg border theme-border">
                 Showing {filteredErrors.length} of {posDocumentation.errorCodes?.length || 0} Codes
               </span>
             </div>
