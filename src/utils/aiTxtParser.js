@@ -640,12 +640,15 @@ function parseSingleBlock(block, index) {
 
   if (!prompt && !expectedAnswer) return null;
 
+  const envType = getEnvTypeFromCategory(category);
+
   return {
     id: index + 1,
     ticketId,
     title,
     difficulty,
     category,
+    envType,
     scenario,
     prompt,
     hint,
@@ -653,11 +656,11 @@ function parseSingleBlock(block, index) {
     expectedQuery: expectedAnswer,
     expectedAnswer,
     explanation,
-    tags: [category, difficulty, 'Custom-AI'],
+    tags: [category, difficulty, envType.toUpperCase(), 'Custom-AI'],
     simpleGoal: scenario.length > 20 ? scenario.slice(0, 150) + '...' : prompt,
     simplePrompt: prompt,
     simpleSteps: [
-      `Category: ${category}`,
+      `Category: ${category} (${envType.toUpperCase()})`,
       `Review target system and parameters`,
       `Execute and verify resolution command`
     ]
@@ -666,6 +669,7 @@ function parseSingleBlock(block, index) {
 
 function standardizeQuestion(item, index) {
   const category = cleanCategory(item.category || item.topic || 'SQL');
+  const envType = item.envType || getEnvTypeFromCategory(category);
   const difficulty = cleanDifficulty(item.difficulty || item.level || 'Medium');
   const ticketId = item.ticketId || item.ticket_id || `INC-AI-${300 + index + 1}`;
   const prompt = item.prompt || item.question || item.scenario || 'No prompt provided.';
@@ -677,31 +681,39 @@ function standardizeQuestion(item, index) {
     title: item.title || `Incident Scenario #${index + 1}`,
     difficulty,
     category,
+    envType,
     scenario: item.scenario || prompt,
     prompt,
     hint: item.hint || 'Check parameters and syntax carefully.',
     starterCode: item.starterCode || item.starter_code || 
-      (category === 'SQL' 
+      (envType === 'sql' 
         ? `-- Incident ${ticketId}\n-- Write your query below:\n` 
         : `# Incident ${ticketId}\n# Write your command below:\n`),
     expectedQuery: expectedAnswer,
     expectedAnswer,
     explanation: item.explanation || 'Verified diagnostic procedure.',
-    tags: [category, difficulty, 'Custom-AI'],
+    tags: [category, difficulty, envType.toUpperCase(), 'Custom-AI'],
     simpleGoal: item.simpleGoal || prompt,
     simplePrompt: prompt,
     simpleSteps: [
-      `Category: ${category}`,
+      `Category: ${category} (${envType.toUpperCase()})`,
       `Review incident symptoms`,
       `Formulate targeted fix`
     ]
   };
 }
 
+export function getEnvTypeFromCategory(val = '') {
+  const s = String(val).toLowerCase();
+  if (s.includes('power') || s.includes('ps') || s.includes('shell')) return 'powershell';
+  if (s.includes('net') || s.includes('ping') || s.includes('dns') || s.includes('ip') || s.includes('port')) return 'network';
+  return 'sql';
+}
+
 function cleanCategory(val = '') {
   const s = String(val).toLowerCase();
   if (s.includes('power') || s.includes('ps') || s.includes('shell')) return 'PowerShell';
-  if (s.includes('net') || s.includes('ping') || s.includes('dns') || s.includes('ip')) return 'Network Troubleshooting';
+  if (s.includes('net') || s.includes('ping') || s.includes('dns') || s.includes('ip') || s.includes('port')) return 'Network Troubleshooting';
   return 'SQL';
 }
 
@@ -712,3 +724,4 @@ function cleanDifficulty(val = '') {
   if (s.includes('med')) return 'Medium';
   return 'Basic';
 }
+

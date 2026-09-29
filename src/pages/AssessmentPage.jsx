@@ -22,21 +22,28 @@ import {
   Unlock, 
   RotateCcw, 
   Sparkles, 
-  Lock
+  Lock,
+  Wifi,
+  Cpu
 } from 'lucide-react';
 import { questionBank, difficultyColors } from '../data/questionBank';
 import { initializeDatabase, posDocumentation, clearCustomDatabase } from '../data/mockDatabase';
-import { validateQuery } from '../utils/sqlValidator';
+import { validateQuery, ensureDynamicTablesForQuery } from '../utils/sqlValidator';
 import { getStoredApiKey, evaluateAnswerWithGemini } from '../services/geminiService';
+import { getQuestionEnv, ENV_CONFIGS, generateSimulatedCliOutput } from '../utils/envHelper';
 import ResultTable from '../components/ResultTable';
+import TerminalOutputView from '../components/TerminalOutputView';
 import SchemaModal from '../components/SchemaModal';
 import QuestionNavigatorModal from '../components/QuestionNavigatorModal';
 import ThemeToggle from '../components/ThemeToggle';
 import ssquelLogo from '../assets/ssquel.png';
 
 // Evaluates PowerShell / Network questions outside render scope
-async function evaluateNonSQL({ apiKey, question, userQuery }) {
+async function evaluateNonSQL({ apiKey, question, userQuery, envType }) {
   const startTime = Date.now();
+  let isCorrect = false;
+  let feedback = '';
+
   if (apiKey) {
     try {
       const evalResult = await evaluateAnswerWithGemini({
@@ -44,33 +51,34 @@ async function evaluateNonSQL({ apiKey, question, userQuery }) {
         question,
         userAnswer: userQuery
       });
-      const execTime = Date.now() - startTime;
-      return {
-        isCorrect: evalResult.isCorrect,
-        userResult: [{ SubmittedCommand: userQuery, Evaluation: evalResult.isCorrect ? 'VALID' : 'INCOMPLETE' }],
-        expectedResult: [{ TargetSolution: question.expectedAnswer, Explanation: question.explanation }],
-        feedback: evalResult.feedback + (evalResult.suggestion ? ` Hint: ${evalResult.suggestion}` : ''),
-        executionTimeMs: execTime
-      };
+      isCorrect = evalResult.isCorrect;
+      feedback = evalResult.feedback + (evalResult.suggestion ? ` Hint: ${evalResult.suggestion}` : '');
     } catch {
       // Fallback to pattern matching
     }
   }
 
-  const cleanUser = userQuery.trim().toLowerCase().replace(/\s+/g, ' ');
-  const cleanExp = (question.expectedAnswer || '').trim().toLowerCase().replace(/\s+/g, ' ');
-  const isExact = cleanUser === cleanExp;
-  const isPartial = cleanUser.length > 5 && cleanExp.includes(cleanUser);
-  const isCorrect = isExact || isPartial;
+  if (!feedback) {
+    const cleanUser = userQuery.trim().toLowerCase().replace(/\s+/g, ' ');
+    const cleanExp = (question.expectedAnswer || question.expectedQuery || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const isExact = cleanUser === cleanExp;
+    const isPartial = cleanUser.length > 4 && cleanExp.includes(cleanUser);
+    isCorrect = isExact || isPartial;
+    feedback = isCorrect
+      ? `Resolution Verified! Your ${envType === 'powershell' ? 'PowerShell cmdlet' : 'diagnostic command'} conforms to standard troubleshooting procedures.`
+      : `Discrepancy detected: Verify parameters, syntax flags, and targeted endpoints for this incident.`;
+  }
+
+  const cliOutput = generateSimulatedCliOutput(envType, userQuery, isCorrect, question);
+  const execTime = Date.now() - startTime;
 
   return {
     isCorrect,
     userResult: [{ SubmittedCommand: userQuery, Status: isCorrect ? 'ACCEPTED' : 'NEEDS_REVIEW' }],
-    expectedResult: [{ Solution: question.expectedAnswer, Purpose: question.explanation }],
-    feedback: isCorrect
-      ? 'Procedure Verified! Your command matches the required troubleshooting steps.'
-      : 'Discrepancy detected: Verify parameters, syntax, and targeting for this incident.',
-    executionTimeMs: Date.now() - startTime
+    expectedResult: [{ TargetSolution: question.expectedAnswer || question.expectedQuery, Purpose: question.explanation }],
+    feedback,
+    cliOutput,
+    executionTimeMs: execTime
   };
 }
 
@@ -112,13 +120,17 @@ export default function AssessmentPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const currentQuestion = currentBank[currentIndex] || currentBank[0] || questionBank[0];
 
+  // Environment detection (sql | powershell | network)
+  const currentEnv = getQuestionEnv(currentQuestion);
+  const envConfig = ENV_CONFIGS[currentEnv] || ENV_CONFIGS.sql;
+
   const [userQuery, setUserQuery] = useState(() => currentQuestion?.starterCode || '');
   const [showHint, setShowHint] = useState(false);
   const [activeOutputTab, setActiveOutputTab] = useState('user'); // 'user' | 'expected'
   const [copied, setCopied] = useState(false);
 
-  // Question Mode: 'simplified' (easy & clear) | 'technical' (L2 IT ticket)
-  const [questionMode, setQuestionMode] = useState('simplified');
+  // Question Mode: 'technical' (L2 ITSM Ticket Report) | 'simplified' (Plain English)
+  const [questionMode, setQuestionMode] = useState('technical');
 
   // Solution Reveal State (Hide solution first during practice)
   const [isSolutionRevealed, setIsSolutionRevealed] = useState(false);
@@ -154,6 +166,7 @@ export default function AssessmentPage() {
     const targetQ = currentBank[newIndex];
     setCurrentIndex(newIndex);
     setUserQuery(targetQ.starterCode || '');
+    ensureDynamicTablesForQuery(targetQ.starterCode || '', targetQ.expectedQuery || targetQ.expectedAnswer || '');
     setExecutionResult(null);
     setShowHint(false);
     setIsSolutionRevealed(false);
@@ -169,6 +182,7 @@ export default function AssessmentPage() {
     const bank = (type === 'ai' && aiQuestions) ? aiQuestions : questionBank;
     const firstQ = bank[0] || questionBank[0];
     setUserQuery(firstQ.starterCode || '');
+    ensureDynamicTablesForQuery(firstQ.starterCode || '', firstQ.expectedQuery || firstQ.expectedAnswer || '');
     setExecutionResult(null);
     setShowHint(false);
     setIsSolutionRevealed(false);
@@ -217,9 +231,8 @@ export default function AssessmentPage() {
   // Run and validate query or command
   const handleCheckAnswer = async () => {
     setIsValidating(true);
-    const isSQL = !currentQuestion.category || currentQuestion.category === 'SQL';
 
-    if (isSQL) {
+    if (currentEnv === 'sql') {
       setTimeout(() => {
         const result = validateQuery(userQuery, currentQuestion.expectedQuery || currentQuestion.expectedAnswer);
         setExecutionResult(result);
@@ -235,7 +248,12 @@ export default function AssessmentPage() {
     } else {
       // PowerShell or Network Troubleshooting evaluation
       const apiKey = getStoredApiKey();
-      const result = await evaluateNonSQL({ apiKey, question: currentQuestion, userQuery });
+      const result = await evaluateNonSQL({ 
+        apiKey, 
+        question: currentQuestion, 
+        userQuery, 
+        envType: currentEnv 
+      });
       setExecutionResult(result);
       if (result.isCorrect) {
         setCompletedQuestions(prev => ({ ...prev, [currentQuestion.id]: true }));
@@ -281,17 +299,6 @@ export default function AssessmentPage() {
     initializeDatabase();
     setExecutionResult(null);
     alert('Mock AlaSQL Database has been reset to original state.');
-  };
-
-  // Dynamic snippets based on question category
-  const getSnippets = () => {
-    if (currentQuestion.category === 'PowerShell') {
-      return ['Get-Service', 'Restart-Service', 'Test-NetConnection', 'Get-WinEvent', 'Stop-Process', 'Test-Path', 'Get-Process'];
-    }
-    if (currentQuestion.category === 'Network Troubleshooting') {
-      return ['ping -t', 'tracert', 'nslookup', 'netstat -ano', 'Test-NetConnection -Port', 'ipconfig /all', 'curl -I'];
-    }
-    return ['SELECT', 'FROM', 'WHERE', 'INNER JOIN', 'GROUP BY', 'HAVING', 'ORDER BY'];
   };
 
   const isCurrentSolved = !!completedQuestions[currentQuestion.id];
@@ -342,15 +349,25 @@ export default function AssessmentPage() {
                 }`}
               >
                 <Sparkles className="w-3 h-3 text-sky-400" />
-                AI Set (10)
+                AI Set ({aiQuestions.length})
               </button>
             )}
           </div>
 
-          {/* Category / Difficulty Badge */}
-          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold font-mono border ${colors.badge}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${colors.dot}`} />
-            {currentQuestion.category || currentQuestion.difficulty} &bull; #{currentQuestion.id}/{currentBank.length}
+          {/* Environment & Discipline Badge */}
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold font-mono border ${
+            currentEnv === 'powershell'
+              ? 'bg-purple-950/70 text-purple-300 border-purple-600/50'
+              : currentEnv === 'network'
+              ? 'bg-cyan-950/70 text-cyan-300 border-cyan-600/50'
+              : colors.badge
+          }`}>
+            {currentEnv === 'powershell' ? <Terminal className="w-3 h-3 text-purple-400" /> :
+             currentEnv === 'network' ? <Wifi className="w-3 h-3 text-cyan-400" /> :
+             <Database className="w-3 h-3 text-blue-400" />}
+            <span>{envConfig.label}</span>
+            <span className="opacity-60">&bull;</span>
+            <span>#{currentQuestion.id}/{currentBank.length}</span>
           </span>
         </div>
 
@@ -410,6 +427,18 @@ export default function AssessmentPage() {
             </span>
           </button>
 
+          {/* Schema Explorer (SQL only) */}
+          {currentEnv === 'sql' && (
+            <button
+              onClick={() => setIsSchemaOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 dark:text-sky-300 text-xs font-mono transition-colors shadow-sm"
+              title="Inspect Active Mock Database Tables & Columns"
+            >
+              <Database className="w-3.5 h-3.5 text-blue-500 dark:text-sky-400" />
+              <span className="hidden sm:inline">Database Schema</span>
+            </button>
+          )}
+
           {/* Documentation & Runbook Explorer */}
           <button
             onClick={() => handleOpenDocumentation()}
@@ -420,23 +449,16 @@ export default function AssessmentPage() {
             <span className="hidden sm:inline">Documentation</span>
           </button>
 
-          {/* Schema Explorer */}
-          <button
-            onClick={() => setIsSchemaOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border theme-border bg-[var(--bg-surface)] hover:bg-[var(--bg-surface2)] theme-text-sec text-xs font-mono transition-colors"
-          >
-            <Database className="w-3.5 h-3.5 text-blue-500 dark:text-sky-400" />
-            <span className="hidden sm:inline">Schema</span>
-          </button>
-
-          {/* Reset DB */}
-          <button
-            onClick={handleResetDatabase}
-            className="p-1.5 rounded-lg border theme-border bg-[var(--bg-surface)] hover:bg-[var(--bg-surface2)] theme-text-muted transition-colors"
-            title="Reset Mock AlaSQL Database"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-          </button>
+          {/* Reset DB (SQL only) */}
+          {currentEnv === 'sql' && (
+            <button
+              onClick={handleResetDatabase}
+              className="p-1.5 rounded-lg border theme-border bg-[var(--bg-surface)] hover:bg-[var(--bg-surface2)] theme-text-muted transition-colors"
+              title="Reset Mock AlaSQL Database"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+          )}
 
           <ThemeToggle />
         </div>
@@ -460,7 +482,7 @@ export default function AssessmentPage() {
                 <span className="text-blue-700 dark:text-sky-300 font-bold">{currentQuestion.ticketId || `INC-${currentQuestion.id}`}</span>
               </div>
 
-              {/* Priority Badge - keep severity colors (rose/amber/blue) */}
+              {/* Priority Badge */}
               <span className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold border ${
                 currentQuestion.difficulty === 'Advanced' || currentQuestion.category === 'Network'
                   ? 'bg-rose-500/15 text-rose-700 border-rose-400/40 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-500/40'
@@ -480,18 +502,23 @@ export default function AssessmentPage() {
                 OPEN • L2 Escalation
               </span>
 
+              {/* Environment Identifier Tag */}
+              <span className="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-mono font-semibold uppercase">
+                Env: {currentEnv.toUpperCase()}
+              </span>
+
               {/* Reporter & Assignee (Desktop) */}
               <span className="hidden md:inline-flex items-center gap-1 text-[11px] theme-text-muted font-mono">
-                <span className="theme-text-muted">Assignee:</span> <strong className="theme-text-sec">L2 Store Systems (You)</strong>
+                <span className="theme-text-muted">Assignee:</span> <strong className="theme-text-sec">L2 Support Engineer (You)</strong>
               </span>
               <span className="hidden xl:inline-flex items-center gap-1 text-[11px] text-slate-400 font-mono">
                 <span className="text-slate-500">SLA:</span> <span className="text-amber-400">&lt; 15 min</span>
               </span>
             </div>
 
-            {/* Right Action Controls: Eye Icon Button & Mode Switcher */}
+            {/* Right Action Controls: Documentation Button & Mode Switcher */}
             <div className="flex items-center gap-2">
-              {/* 👁️ View Documentation & Runbook Button */}
+              {/* Documentation Runbook Button */}
               <button
                 onClick={() => {
                   const detectedCode = (posDocumentation.errorCodes || []).find(e => 
@@ -507,7 +534,7 @@ export default function AssessmentPage() {
                 <span className="sm:hidden">Runbook</span>
               </button>
 
-              {/* Question Mode Switcher: Blue/Navy */}
+              {/* Question Mode Switcher */}
               <div className="flex items-center rounded-xl bg-slate-950 p-1 border border-blue-950 text-xs">
                 <button
                   onClick={() => setQuestionMode('simplified')}
@@ -586,34 +613,67 @@ export default function AssessmentPage() {
                   </div>
                 </div>
               ) : (
-                <div className="space-y-2.5">
-                  {/* ITSM Incident Details Card */}
-                  <div className="p-3.5 rounded-xl bg-indigo-950/20 border border-indigo-900/50 text-xs space-y-2">
-                    <div className="flex items-center justify-between text-[11px] font-mono pb-1 border-b border-indigo-950/60">
-                      <span className="text-indigo-300 font-semibold uppercase tracking-wider">
-                        Incident Narrative & Symptoms
-                      </span>
-                      <span className="text-slate-500">
-                        Affected Fleet: Store On-Prem POS
-                      </span>
+                /* Structured Enterprise ITSM Ticket Report */
+                <div className="rounded-2xl border border-indigo-900/60 bg-gradient-to-b from-indigo-950/30 via-slate-950/80 to-slate-950 text-xs shadow-2xl overflow-hidden space-y-0">
+                  
+                  {/* Ticket Meta Grid (4 items) */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 p-3 bg-slate-900/90 border-b border-indigo-950 text-[11px] font-mono">
+                    <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+                      <span className="text-slate-500 uppercase text-[9px] block">Reported By</span>
+                      <strong className="text-sky-300 font-semibold truncate block mt-0.5">
+                        {currentQuestion.reportedBy || "Store NOC Monitoring Daemon"}
+                      </strong>
                     </div>
-                    <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                      {currentQuestion.scenario}
-                    </p>
+                    <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+                      <span className="text-slate-500 uppercase text-[9px] block">Impacted Asset</span>
+                      <strong className="text-indigo-300 font-semibold truncate block mt-0.5">
+                        {currentQuestion.component || (currentEnv === 'powershell' ? 'Windows POS Host' : currentEnv === 'network' ? 'Store Gateway' : 'POS DB Fleet')}
+                      </strong>
+                    </div>
+                    <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+                      <span className="text-slate-500 uppercase text-[9px] block">Operational Impact</span>
+                      <strong className="text-amber-300 font-semibold truncate block mt-0.5">
+                        {currentQuestion.impact || "Service Disruption Risk"}
+                      </strong>
+                    </div>
+                    <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+                      <span className="text-slate-500 uppercase text-[9px] block">Target SLA</span>
+                      <strong className="text-emerald-400 font-semibold truncate block mt-0.5">
+                        {currentQuestion.sla || "< 15 min Target"}
+                      </strong>
+                    </div>
                   </div>
 
-                  <div className="flex items-start gap-2 p-2.5 rounded-xl bg-slate-950/90 border border-blue-950 text-xs">
-                    <Terminal className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-semibold text-sky-300 font-mono">Investigation Objective: </span>
-                      <span className="text-slate-300">{currentQuestion.prompt}</span>
+                  {/* Ticket Narrative & Symptoms Body */}
+                  <div className="p-4 space-y-3">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2 text-[11px] font-mono text-indigo-300 font-semibold uppercase tracking-wider">
+                        <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />
+                        Incident Narrative &amp; Reported Symptoms
+                      </div>
+                      <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-normal bg-slate-950/70 p-3.5 rounded-xl border border-indigo-950/80">
+                        {currentQuestion.scenario}
+                      </p>
+                    </div>
+
+                    {/* Technical Investigation Scope & Acceptance Criteria */}
+                    <div className="p-3.5 rounded-xl bg-blue-950/30 border border-blue-900/50 text-xs flex items-start gap-2.5">
+                      <Terminal className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <span className="font-bold text-sky-300 font-mono block">
+                          Investigation Objective &amp; Data Requirements:
+                        </span>
+                        <p className="text-slate-200 leading-relaxed font-medium">
+                          {currentQuestion.prompt}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Hint & Tags (Keeps Amber/Orange for hint procedure) */}
+            {/* Hint & Tags */}
             <div className="flex sm:flex-col items-end gap-2 shrink-0">
               <button
                 onClick={() => setShowHint(!showHint)}
@@ -640,7 +700,7 @@ export default function AssessmentPage() {
             </div>
           </div>
 
-          {/* Hint Drawer in Amber/Orange */}
+          {/* Hint Drawer */}
           {showHint && (
             <div className="mt-2 p-3 rounded-xl bg-amber-950/20 border border-amber-500/30 text-amber-200 text-xs font-sans leading-relaxed animate-in fade-in duration-150 flex items-start gap-2">
               <Lightbulb className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
@@ -655,19 +715,27 @@ export default function AssessmentPage() {
         {/* Middle Area: Split Editor & Output Panels */}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-3 min-h-[460px]">
           
-          {/* Left Panel: Query/Command Editor */}
+          {/* Left Panel: Query / Command Editor */}
           <div className="flex flex-col rounded-2xl border theme-border bg-[var(--bg-surface)] overflow-hidden shadow-xl">
             {/* Editor Subheader */}
             <div className="flex items-center justify-between px-3 py-2 bg-[var(--bg-surface2)] border-b theme-border-m text-xs">
               <div className="flex items-center gap-2">
-                <Code2 className="w-4 h-4 text-blue-500 dark:text-sky-400" />
+                {currentEnv === 'powershell' ? <Terminal className="w-4 h-4 text-purple-400" /> :
+                 currentEnv === 'network' ? <Wifi className="w-4 h-4 text-cyan-400" /> :
+                 <Code2 className="w-4 h-4 text-blue-500 dark:text-sky-400" />}
+                
                 <span className="font-semibold theme-text font-mono">
-                  {currentQuestion.category === 'PowerShell' ? 'PowerShell Terminal Script' :
-                   currentQuestion.category === 'Network Troubleshooting' ? 'Network Command Console' :
-                   'SQL Query Editor'}
+                  {envConfig.editorTitle}
                 </span>
-                <span className="text-[10px] font-mono text-blue-700 dark:text-sky-300 px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-950 border border-blue-200 dark:border-blue-800/60">
-                  {currentQuestion.category || 'AlaSQL Dialect'}
+
+                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
+                  currentEnv === 'powershell'
+                    ? 'bg-purple-950 text-purple-300 border-purple-800/60'
+                    : currentEnv === 'network'
+                    ? 'bg-cyan-950 text-cyan-300 border-cyan-800/60'
+                    : 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-sky-300 border-blue-200 dark:border-blue-800/60'
+                }`}>
+                  {envConfig.badge}
                 </span>
               </div>
 
@@ -695,11 +763,17 @@ export default function AssessmentPage() {
             {/* Keyword / Cmdlet Helper Bar */}
             <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--bg-surface2)] border-b theme-border-m overflow-x-auto text-[11px] font-mono scrollbar-none">
               <span className="theme-text-muted text-[10px] mr-1 uppercase">Snippets:</span>
-              {getSnippets().map(kw => (
+              {(envConfig.snippets || []).map(kw => (
                 <button
                   key={kw}
                   onClick={() => handleInsertKeyword(kw)}
-                  className="px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-950/60 hover:bg-blue-200 dark:hover:bg-blue-900/60 text-blue-700 dark:text-sky-300 border border-blue-200 dark:border-blue-800/60 transition-colors whitespace-nowrap active:scale-95"
+                  className={`px-2 py-0.5 rounded text-[11px] border transition-colors whitespace-nowrap active:scale-95 ${
+                    currentEnv === 'powershell'
+                      ? 'bg-purple-950/60 hover:bg-purple-900/60 text-purple-200 border-purple-800/60'
+                      : currentEnv === 'network'
+                      ? 'bg-cyan-950/60 hover:bg-cyan-900/60 text-cyan-200 border-cyan-800/60'
+                      : 'bg-blue-100 dark:bg-blue-950/60 hover:bg-blue-200 dark:hover:bg-blue-900/60 text-blue-700 dark:text-sky-300 border-blue-200 dark:border-blue-800/60'
+                  }`}
                 >
                   {kw}
                 </button>
@@ -713,13 +787,7 @@ export default function AssessmentPage() {
                 value={userQuery}
                 onChange={(e) => setUserQuery(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={
-                  currentQuestion.category === 'PowerShell'
-                    ? '# Write your PowerShell command here...\nRestart-Service -Name W3SVC -Force'
-                    : currentQuestion.category === 'Network Troubleshooting'
-                    ? '# Write your network diagnostic command here...\nTest-NetConnection -ComputerName 10.101.0.5 -Port 8080'
-                    : '-- Write your SQL query here...\nSELECT * FROM Stores;'
-                }
+                placeholder={envConfig.placeholder}
                 spellCheck={false}
                 className="w-full h-full p-4 bg-transparent theme-text font-mono resize-none focus:outline-none focus:ring-1 focus:ring-blue-500/50 leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-600"
               />
@@ -753,7 +821,9 @@ export default function AssessmentPage() {
                       : 'theme-text-muted hover:theme-text-sec'
                   }`}
                 >
-                  <Database className="w-3.5 h-3.5 text-current dark:text-sky-400" />
+                  {currentEnv === 'powershell' ? <Terminal className="w-3.5 h-3.5 text-current dark:text-purple-300" /> :
+                   currentEnv === 'network' ? <Wifi className="w-3.5 h-3.5 text-current dark:text-cyan-300" /> :
+                   <Database className="w-3.5 h-3.5 text-current dark:text-sky-400" />}
                   Execution Result
                 </button>
 
@@ -775,7 +845,6 @@ export default function AssessmentPage() {
                 const errorLower = (executionResult.error || '').toLowerCase();
                 const isErrorOrNoTable = 
                   Boolean(executionResult.error) ||
-                  !executionResult.userResult ||
                   errorLower.includes('table') ||
                   feedbackLower.includes('no table found') ||
                   feedbackLower.includes('table not found') ||
@@ -810,13 +879,12 @@ export default function AssessmentPage() {
               })()}
             </div>
 
-            {/* Validation Feedback Banner: Green (Correct), Red (Error/No Table), Orange (Missing/Incomplete) */}
+            {/* Validation Feedback Banner */}
             {executionResult && (() => {
               const feedbackLower = (executionResult.feedback || '').toLowerCase();
               const errorLower = (executionResult.error || '').toLowerCase();
               const isErrorOrNoTable = 
                 Boolean(executionResult.error) ||
-                !executionResult.userResult ||
                 errorLower.includes('table') ||
                 feedbackLower.includes('no table found') ||
                 feedbackLower.includes('table not found') ||
@@ -869,7 +937,7 @@ export default function AssessmentPage() {
                   <div className="flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
                     <span className="font-semibold leading-relaxed">
-                      {executionResult.feedback || 'Data discrepancy: Output is missing expected rows or columns.'}
+                      {executionResult.feedback || 'Data discrepancy: Output is missing expected parameters or records.'}
                     </span>
                   </div>
 
@@ -885,13 +953,22 @@ export default function AssessmentPage() {
             {/* Output Display Body */}
             <div className="flex-1 p-3 overflow-y-auto bg-[var(--bg-base)] dark:bg-slate-950/60">
               {activeOutputTab === 'user' ? (
-                <ResultTable
-                  data={executionResult?.userResult}
-                  error={executionResult?.error}
-                  executionTimeMs={executionResult?.executionTimeMs}
-                  title="Your Execution Output"
-                  maxHeight="max-h-[380px]"
-                />
+                currentEnv === 'sql' ? (
+                  <ResultTable
+                    data={executionResult?.userResult}
+                    error={executionResult?.error}
+                    executionTimeMs={executionResult?.executionTimeMs}
+                    title="Your Execution Output"
+                    maxHeight="max-h-[380px]"
+                  />
+                ) : (
+                  <TerminalOutputView
+                    envType={currentEnv}
+                    command={userQuery}
+                    executionResult={executionResult}
+                    title={`${envConfig.label} Terminal`}
+                  />
+                )
               ) : (
                 /* Expected Solution Tab */
                 <div className="space-y-3">
@@ -904,7 +981,7 @@ export default function AssessmentPage() {
                         Solution Hidden (Practice Active)
                       </h4>
                       <p className="theme-text-muted text-xs max-w-sm mb-4">
-                        Attempt to write and execute your query or command first. If you need help, you can reveal the benchmark solution below.
+                        Attempt to write and execute your {currentEnv === 'sql' ? 'SQL query' : 'command'} first. If you need help, you can reveal the benchmark solution below.
                       </p>
                       <button
                         onClick={() => setIsSolutionRevealed(true)}
@@ -927,7 +1004,7 @@ export default function AssessmentPage() {
                             className="flex items-center gap-1 text-[11px] font-mono theme-text-muted hover:theme-text-sec transition-colors"
                           >
                             <EyeOff className="w-3 h-3" />
-                            Hide Query
+                            Hide Solution
                           </button>
                         )}
                       </div>
@@ -943,7 +1020,7 @@ export default function AssessmentPage() {
                     </div>
                   )}
 
-                  {executionResult?.expectedResult && (
+                  {currentEnv === 'sql' && executionResult?.expectedResult && (
                     <ResultTable
                       data={executionResult.expectedResult}
                       title="Expected Result Set"
@@ -1016,14 +1093,14 @@ export default function AssessmentPage() {
               <span>Previous</span>
             </button>
 
-            {/* Check Answer */}
+            {/* Check Answer / Run Command */}
             <button
               onClick={handleCheckAnswer}
               disabled={isValidating}
               className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 text-white font-bold text-xs font-mono shadow-lg border border-blue-400/40 active:scale-95 transition-all disabled:opacity-50"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
-              <span>{isValidating ? 'Validating...' : 'Check Answer'}</span>
+              <span>{isValidating ? 'Validating...' : envConfig.actionButtonText}</span>
             </button>
 
             {/* Next */}

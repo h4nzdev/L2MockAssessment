@@ -73,11 +73,116 @@ function formatSqlError(err) {
 }
 
 /**
+ * Automatically creates and augments tables and columns referenced in custom AI queries
+ * so that AI question sets always execute against a valid mock dataset.
+ */
+export function ensureDynamicTablesForQuery(query = '', expectedQuery = '') {
+  try {
+    ensureAlaSqlDatabase();
+    const combined = `${query} ${expectedQuery}`;
+    if (!combined.trim()) return;
+
+    // 1. Extract table names from FROM and JOIN
+    const fromMatches = [...combined.matchAll(/\b(?:FROM|JOIN)\s+([a-zA-Z0-9_]+)/gi)];
+    const tableNames = new Set();
+    fromMatches.forEach(m => {
+      if (m[1]) tableNames.add(m[1].trim());
+    });
+
+    // 2. Extract column references from query
+    const colMatches = [...combined.matchAll(/\b([a-zA-Z_][a-zA-Z0-9_]*)\b/g)];
+    const sqlKeywords = new Set([
+      'select', 'from', 'where', 'and', 'or', 'not', 'in', 'is', 'null',
+      'join', 'inner', 'left', 'right', 'outer', 'cross', 'on', 'group',
+      'by', 'order', 'having', 'asc', 'desc', 'limit', 'as', 'count',
+      'sum', 'avg', 'min', 'max', 'case', 'when', 'then', 'else', 'end',
+      'distinct', 'between', 'like', 'int', 'string', 'number', 'create',
+      'table', 'insert', 'into', 'values', 'update', 'delete', 'set'
+    ]);
+
+    tableNames.forEach(tblName => {
+      let existingTable = alasql.tables && alasql.tables[tblName];
+
+      // If table doesn't exist, create it with rich mock records
+      if (!existingTable) {
+        const mockRows = [];
+        const idMatch = combined.match(/\b(\d{3,6})\b/);
+        const targetId = idMatch ? Number(idMatch[1]) : 12345;
+
+        for (let i = 1; i <= 6; i++) {
+          const rowId = i === 1 ? targetId : (1000 + i);
+          const row = {
+            id: rowId,
+            orderid: rowId,
+            OrderID: rowId,
+            order_id: rowId,
+            ordertime: `2026-09-30 02:1${i}:00`,
+            OrderTime: `2026-09-30 02:1${i}:00`,
+            order_time: `2026-09-30 02:1${i}:00`,
+            orderstatus: i === 1 ? 'IN_PREP' : (i % 2 === 0 ? 'COMPLETED' : 'PENDING'),
+            OrderStatus: i === 1 ? 'IN_PREP' : (i % 2 === 0 ? 'COMPLETED' : 'PENDING'),
+            order_status: i === 1 ? 'IN_PREP' : (i % 2 === 0 ? 'COMPLETED' : 'PENDING'),
+            terminalid: 100 + i,
+            TerminalID: 100 + i,
+            terminal_id: 100 + i,
+            status: i === 1 ? 'IN_PREP' : 'COMPLETED',
+            total_amount: (i * 35.50),
+            price: (i * 12.00),
+            item_name: `Product ${i}`,
+            is_available: 1
+          };
+          mockRows.push(row);
+        }
+
+        try {
+          alasql(`CREATE TABLE ${tblName};`);
+          alasql.tables[tblName].data = mockRows;
+        } catch {
+          // ignore
+        }
+        existingTable = alasql.tables[tblName];
+      }
+
+      // If table exists, ensure all referenced columns exist in the table objects
+      if (existingTable && Array.isArray(existingTable.data)) {
+        const firstRow = existingTable.data[0] || {};
+        
+        colMatches.forEach(m => {
+          const word = m[1];
+          const wLower = word.toLowerCase();
+          if (!sqlKeywords.has(wLower) && !tableNames.has(word) && isNaN(word)) {
+            // Check if column exists in any casing
+            const hasExact = Object.prototype.hasOwnProperty.call(firstRow, word);
+            const hasLower = Object.prototype.hasOwnProperty.call(firstRow, wLower);
+
+            if (!hasExact && !hasLower) {
+              const numValMatch = combined.match(new RegExp(`${word}\\s*=\\s*(\\d+)`, 'i'));
+              const defaultVal = numValMatch ? Number(numValMatch[1]) : 12345;
+              
+              existingTable.data.forEach((r, idx) => {
+                r[word] = idx === 0 ? defaultVal : (100 + idx);
+                r[wLower] = idx === 0 ? defaultVal : (100 + idx);
+              });
+            } else if (!hasExact && hasLower) {
+              // Copy lowercase value to exact casing for case-sensitive queries
+              existingTable.data.forEach(r => {
+                r[word] = r[wLower];
+              });
+            }
+          }
+        });
+      }
+    });
+  } catch (err) {
+    console.warn('Auto table/column synthesis warning:', err);
+  }
+}
+
+/**
  * Validates user SQL query against the expected SQL query using AlaSQL
  */
 export function validateQuery(userQuery, expectedQuery) {
   const startTime = performance.now();
-
   const queryToRun = cleanSql(userQuery);
 
   if (!queryToRun) {
@@ -91,8 +196,9 @@ export function validateQuery(userQuery, expectedQuery) {
     };
   }
 
-  // Ensure AlaSQL database is healthy and ready
+  // Ensure AlaSQL database is healthy and dynamic tables exist
   ensureAlaSqlDatabase();
+  ensureDynamicTablesForQuery(queryToRun, expectedQuery);
 
   let userResult;
   let userExecutionTime;
@@ -101,15 +207,22 @@ export function validateQuery(userQuery, expectedQuery) {
     userResult = alasql(queryToRun);
     userExecutionTime = Math.round((performance.now() - runStart) * 100) / 100;
   } catch (err) {
-    const friendlyError = formatSqlError(err);
-    return {
-      isCorrect: false,
-      userResult: null,
-      expectedResult: null,
-      error: friendlyError,
-      executionTimeMs: Math.round((performance.now() - startTime) * 100) / 100,
-      feedback: friendlyError
-    };
+    // Retry once with aggressive dynamic schema augmentation if table/column missing
+    ensureDynamicTablesForQuery(queryToRun, expectedQuery);
+    try {
+      userResult = alasql(queryToRun);
+      userExecutionTime = Math.round((performance.now() - startTime) * 100) / 100;
+    } catch (retryErr) {
+      const friendlyError = formatSqlError(retryErr);
+      return {
+        isCorrect: false,
+        userResult: null,
+        expectedResult: null,
+        error: friendlyError,
+        executionTimeMs: Math.round((performance.now() - startTime) * 100) / 100,
+        feedback: friendlyError
+      };
+    }
   }
 
   // Ensure result is an array of objects
@@ -127,6 +240,7 @@ export function validateQuery(userQuery, expectedQuery) {
   let expectedResult;
   try {
     ensureAlaSqlDatabase();
+    ensureDynamicTablesForQuery(queryToRun, expectedQuery);
     const cleanExpected = cleanSql(expectedQuery);
     expectedResult = alasql(cleanExpected);
   } catch (err) {
@@ -158,7 +272,7 @@ export function validateQuery(userQuery, expectedQuery) {
     };
   }
 
-  // 2. Check column count and names
+  // 2. Check column count and names (case-insensitive)
   const expectedCols = Object.keys(expectedResult[0] || {}).map(c => c.toLowerCase()).sort();
   const userCols = Object.keys(userResult[0] || {}).map(c => c.toLowerCase()).sort();
 
