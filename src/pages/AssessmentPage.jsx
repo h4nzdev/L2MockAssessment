@@ -82,6 +82,68 @@ async function evaluateNonSQL({ apiKey, question, userQuery, envType }) {
   };
 }
 
+// Checks if a question has a matching error code or SOP procedure
+function getRelatedDocumentation(question) {
+  if (!question) return null;
+  const text = `${question.title || ''} ${question.scenario || ''} ${question.prompt || ''} ${(question.tags || []).join(' ')} ${question.ticketId || ''}`.toLowerCase();
+  
+  // 1. Direct error code check (e.g. ERR_SYNC_TIMEOUT, ERR_PAYMENT_GATEWAY_TIMEOUT, ERR_PRINTER_OFFLINE, ERR_DB_LOCK, etc.)
+  const matchedError = (posDocumentation.errorCodes || []).find(e => {
+    const code = e.code.toLowerCase();
+    return text.includes(code) || text.includes(code.replace(/_/g, '-')) ||
+      (text.includes('printer') && code.includes('printer')) ||
+      (text.includes('barcode') && code.includes('barcode')) ||
+      (text.includes('lock') && code.includes('lock')) ||
+      (text.includes('failed') && text.includes('credit') && code.includes('payment_gateway_timeout')) ||
+      (text.includes('pending_sync') && code.includes('sync_timeout'));
+  });
+
+  if (matchedError) {
+    return {
+      type: 'errorCode',
+      code: matchedError.code,
+      title: matchedError.title,
+      label: `Runbook: ${matchedError.code}`
+    };
+  }
+
+  // 2. Direct SOP procedure match (e.g. SOP-POS-001 for Server Outage, SOP-POS-002 for Sync, SOP-POS-003 for Gateway)
+  const matchedSop = (posDocumentation.sopProcedures || []).find(sop => {
+    const id = sop.id.toLowerCase();
+    const title = sop.title.toLowerCase();
+    if (text.includes(id)) return true;
+    if (title.includes('server outage') && text.includes('offline') && (text.includes('store') || text.includes('server'))) return true;
+    if (title.includes('sync backlog') && (text.includes('pending_sync') || text.includes('sync backlog'))) return true;
+    if (title.includes('gateway') && (text.includes('gateway timeout') || (text.includes('credit') && text.includes('failed')))) return true;
+    return false;
+  });
+
+  if (matchedSop) {
+    return {
+      type: 'sop',
+      code: matchedSop.id,
+      title: matchedSop.title,
+      label: `Runbook: ${matchedSop.id}`
+    };
+  }
+
+  // 3. Hardware model check (e.g. NCR RealPOS 70, Verifone M400, Ingenico Lane 5000)
+  const matchedModel = (posDocumentation.terminalModels || []).find(m => {
+    return text.includes(m.model.toLowerCase());
+  });
+
+  if (matchedModel) {
+    return {
+      type: 'model',
+      code: matchedModel.model,
+      title: matchedModel.model,
+      label: `Runbook: ${matchedModel.model}`
+    };
+  }
+
+  return null;
+}
+
 export default function AssessmentPage() {
   const navigate = useNavigate();
 
@@ -123,6 +185,7 @@ export default function AssessmentPage() {
   // Environment detection (sql | powershell | network)
   const currentEnv = getQuestionEnv(currentQuestion);
   const envConfig = ENV_CONFIGS[currentEnv] || ENV_CONFIGS.sql;
+  const relatedDoc = getRelatedDocumentation(currentQuestion);
 
   const [userQuery, setUserQuery] = useState(() => currentQuestion?.starterCode || '');
   const [showHint, setShowHint] = useState(false);
@@ -518,20 +581,36 @@ export default function AssessmentPage() {
 
             {/* Right Action Controls: Documentation Button & Mode Switcher */}
             <div className="flex items-center gap-2">
-              {/* Documentation Runbook Button */}
+              {/* Documentation Runbook Button (Disabled if unrelated to scenario) */}
               <button
                 onClick={() => {
-                  const detectedCode = (posDocumentation.errorCodes || []).find(e => 
-                    (currentQuestion.scenario + ' ' + currentQuestion.prompt + ' ' + (currentQuestion.tags || []).join(' ')).includes(e.code)
-                  )?.code || '';
-                  handleOpenDocumentation(detectedCode);
+                  if (relatedDoc) {
+                    handleOpenDocumentation(relatedDoc.code);
+                  }
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-950 hover:bg-blue-900 border border-blue-700/80 hover:border-blue-500 text-sky-300 text-xs font-mono font-semibold transition-all shadow-md shadow-blue-950/80 active:scale-95"
-                title="Inspect POS Documentation & Error Code SOPs"
+                disabled={!relatedDoc}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-mono font-semibold transition-all ${
+                  relatedDoc
+                    ? 'bg-blue-950 hover:bg-blue-900 border border-blue-700/80 hover:border-blue-500 text-sky-300 shadow-md shadow-blue-950/80 active:scale-95 cursor-pointer'
+                    : 'bg-slate-900/60 border border-slate-800/80 text-slate-500 opacity-40 cursor-not-allowed select-none'
+                }`}
+                title={
+                  relatedDoc
+                    ? `Inspect SOP Runbook for ${relatedDoc.code}: ${relatedDoc.title}`
+                    : 'No specific error code or SOP runbook linked to this scenario'
+                }
               >
-                <Eye className="w-3.5 h-3.5 text-sky-400 animate-pulse" />
-                <span className="hidden sm:inline">Check Documentation & Runbook</span>
-                <span className="sm:hidden">Runbook</span>
+                {relatedDoc ? (
+                  <Eye className="w-3.5 h-3.5 text-sky-400 animate-pulse" />
+                ) : (
+                  <EyeOff className="w-3.5 h-3.5 text-slate-500" />
+                )}
+                <span className="hidden sm:inline">
+                  {relatedDoc ? relatedDoc.label : 'No Runbook Linked'}
+                </span>
+                <span className="sm:hidden">
+                  {relatedDoc ? (relatedDoc.code.length > 12 ? 'Runbook' : relatedDoc.code) : 'No SOP'}
+                </span>
               </button>
 
               {/* Question Mode Switcher */}
