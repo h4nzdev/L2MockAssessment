@@ -1,5 +1,5 @@
-// Mock Incident Data for L2 Helpdesk & Incident Triage Simulator
-// Designed to simulate realistic Level 2 Technical Support at Retail POS & Store Server operations.
+// Mock Incident Data for Hands-On L2 Incident Troubleshooting Simulator
+// Focus: Hands-On SQL Database Troubleshooting & PowerShell System Automation where the user writes and executes the fix.
 
 export const triageDrillSets = [
   {
@@ -87,593 +87,537 @@ export const triageDrillSets = [
         explanation: "P2 (High): Critical back-office data pipeline delay affecting daily supply chain and accounting, but store lanes remain open for live customer checkout."
       }
     ]
-  },
-  {
-    id: "drill-set-3",
-    title: "Holiday Season Concurrency & Security Alerts",
-    context: "High-volume weekend sale. Automated security monitors and store dispatchers have submitted 3 emergency escalations.",
-    tickets: [
-      {
-        id: "INC-9440",
-        title: "Payment Terminal Firmware Tamper Alert Triggered on Lane 1 & Lane 2",
-        storeId: "Store 102 - Makati Flagship",
-        severity: "Critical",
-        reportedBy: "PCI-DSS Automated Security Gateway",
-        impactDescription: "PED hardware security module (HSM) detected casing integrity breach signal. PCI-DSS compliance requires immediate quarantine of registers to prevent card skimming.",
-        scope: "Physical Security & Payment Risk",
-        system: "Ingenico Lane 5000 HSM Core",
-        correctRank: 1,
-        explanation: "P1 (Critical): PCI-DSS security tamper alert represents immediate legal, regulatory, and customer card data theft liability. Immediate lane shutdown & hardware quarantine required."
-      },
-      {
-        id: "INC-9448",
-        title: "Store 220 2D Barcode Scanners Failing on QR Code E-Wallet Mobile Vouchers",
-        storeId: "Store 220 - BGC High Street",
-        severity: "High",
-        reportedBy: "Front-End Lead",
-        impactDescription: "Honeywell 1900G scanners read standard UPC barcodes fine, but fail on smartphone QR code vouchers. Cashiers must manually key in 16-digit voucher codes, causing long queues.",
-        scope: "Store-wide QR Scanning Delay",
-        system: "Honeywell Xenon USB Imager Driver",
-        correctRank: 2,
-        explanation: "P2 (High): Degrades cashier checkout velocity significantly during a high-traffic sale, though workarounds (manual entry) prevent complete sales blockage."
-      },
-      {
-        id: "INC-9455",
-        title: "Store 104 Nightly Sales Summary Report Email Has Missing Department Graph",
-        storeId: "Store 104 - Alabang Town Center",
-        severity: "Low",
-        reportedBy: "Store Auditor",
-        impactDescription: "Automated midnight PDF report email generated without the pie chart visual. Raw CSV table of numbers is intact and accurate.",
-        scope: "Back-Office Reporting Cosmetic",
-        system: "Crystal Reports PDF Exporter",
-        correctRank: 3,
-        explanation: "P3 (Low): Reporting formatting bug with no impact on store operations, trading, or revenue data integrity."
-      }
-    ]
   }
 ];
 
 export const mockIncidentTickets = [
+  // =========================================================================
+  // SQL TROUBLESHOOTING INCIDENTS
+  // =========================================================================
   {
     id: "INC-10492",
+    envType: "sql",
     storeId: "Store 402 - Cebu IT Park",
     storeName: "SSEQUEL Superstore #402",
     city: "Cebu City",
-    terminalId: "REG-402-01 & REG-402-02",
-    terminalModel: "NCR RealPOS 70",
-    title: "POS Terminals Failing Credit Card Sync (HTTP 504)",
+    terminalId: "Store Database Server (SRV-402)",
+    terminalModel: "In-Store Controller / Relational DB",
+    title: "Batch Sync Stalled: Reset Failed Payment Queue to Pending Status",
     severity: "Critical",
     slaMinutes: 15,
-    openedAt: "10 mins ago",
+    openedAt: "4 mins ago",
     status: "OPEN",
-    category: "Payment Gateway",
+    category: "SQL Database Troubleshooting",
     reportedBy: "Maria Santos (Store Supervisor)",
-    customerStatement: "Both checkout registers 1 and 2 freeze for 45 seconds when a customer taps or inserts a credit/debit card, then display 'ERROR 504: Payment Gateway Timeout'. Customers are leaving carts and cashiers are overwhelmed.",
-    terminalLogs: `[2026-09-30 02:48:12.104] [INFO] [EFT-Core] Transaction initiated. Amount: $84.50, Tender: VISA_DEBIT
-[2026-09-30 02:48:12.450] [DEBUG] [EFT-Core] Encrypted payload dispatched to CloudHQ proxy (10.200.4.12:5672)
-[2026-09-30 02:48:27.452] [WARN] [EFT-Core] Socket timeout on port 5672. Retrying handshake (Attempt 1/3)...
-[2026-09-30 02:48:42.455] [WARN] [EFT-Core] Socket timeout on port 5672. Retrying handshake (Attempt 2/3)...
-[2026-09-30 02:48:57.458] [ERROR] [EFT-Core] HTTP 504 Gateway Timeout - No response from upstream host 10.200.4.12
-[2026-09-30 02:48:57.460] [CRITICAL] [EFT-Core] Payment transaction ABORTED. Reversal packet queued in Outbox.
-[2026-09-30 02:48:58.002] [ERROR] [POS-UI] Displaying modal: ERR_PAYMENT_GATEWAY_TIMEOUT`,
+    affectedHost: "SRV-402-DB (192.168.4.10)",
+    affectedService: "CloudHQ AMQP Outbox Sync Engine / Transactions Table",
+    businessImpact: "18 completed customer credit card transactions totaling $1,420.50 are blocked in local queue. ERP sales reconciliation and credit ledger audits are failing.",
+    l1TriageNotes: "L1 verified store WAN connectivity is 100% stable (ping 12ms to HQ). L1 restarted sync service, but daemon rejects records in 'FAILED_GATEWAY' status and halts retries.",
+    timeline: [
+      "02:45:10 AM - Store ISP experienced a 2-minute WAN gateway packet drop during morning peak.",
+      "02:46:02 AM - Outbox sync worker attempted batched HTTP POST to CloudHQ; received 504 Gateway Timeout.",
+      "02:46:05 AM - Worker tagged all 18 pending records with terminal status 'FAILED_GATEWAY'.",
+      "02:48:12 AM - Network restored, but SyncDaemon skips 'FAILED_GATEWAY' status by design.",
+      "02:50:00 AM - Store Supervisor escalated to L2 NOC Helpdesk as P1 Revenue Audit Risk."
+    ],
+    incidentNarrative: "Following a transient WAN flicker at Store 402, 18 credit card transaction records became stuck in a poison state ('FAILED_GATEWAY') in the local 'Transactions' table. The CloudHQ AMQP Outbox daemon is hardcoded to only poll and process records with status = 'PENDING_SYNC'. As a result, the sync pipeline is permanently stalled for these transactions until an L2 Engineer resets them via SQL.",
+    incidentObjective: "Write a SQL UPDATE query on the 'Transactions' table to reset the 'status' column from 'FAILED_GATEWAY' back to 'PENDING_SYNC' for Store ID 402.",
+    starterCode: `-- Write your SQL UPDATE query to reset failed transaction records for Store 402
+UPDATE Transactions
+SET status = 'PENDING_SYNC'
+WHERE ...;`,
+    expectedSolution: `UPDATE Transactions SET status = 'PENDING_SYNC' WHERE store_id = 402 AND status = 'FAILED_GATEWAY';`,
+    validationKeywords: ["update", "transactions", "set", "status", "pending_sync", "402"],
+    validationRegex: [/update\s+transactions\s+set\s+status\s*=\s*['"]PENDING_SYNC['"]/i, /(where.*store_id\s*=\s*402|where.*402)/i],
+    verificationExplanation: "Executing UPDATE Transactions SET status = 'PENDING_SYNC' WHERE store_id = 402 AND status = 'FAILED_GATEWAY' clears the poison state and allows the CloudHQ AMQP daemon to dequeue and transmit all 18 pending orders.",
+    hints: [
+      "Target table: Transactions",
+      "Set column 'status' to 'PENDING_SYNC'",
+      "Filter with WHERE store_id = 402 AND status = 'FAILED_GATEWAY'"
+    ],
     diagnosticChecks: [
       {
-        id: "ping_gateway",
-        name: "Ping Local Store Gateway (192.168.1.1)",
-        command: "Test-Connection -Target 192.168.1.1 -Count 4",
-        status: "SUCCESS",
-        output: "Store Router Gateway (192.168.1.1): Reachable | 4 packets transmitted, 4 received | Round-trip: min=1.2ms, avg=2.1ms, max=3.8ms."
-      },
-      {
-        id: "ping_cloudhq",
-        name: "Ping Enterprise CloudHQ Core (10.200.4.12)",
-        command: "Test-NetConnection -ComputerName 10.200.4.12 -Port 5672",
-        status: "FAILED",
-        output: "CloudHQ EFT Bridge (10.200.4.12:5672): Connection FAILED | TcpTestSucceeded: False | Network path blocked or CloudHQ VPN transit down."
-      },
-      {
-        id: "check_db",
-        name: "Check Local SQLite DB Lock State",
-        command: "Invoke-Sqlcmd -Query 'PRAGMA lock_status;'",
-        status: "SUCCESS",
-        output: "Local Database: Healthy | SQLite In-Memory Buffer: NORMAL | Open transactions: 0 | Database lock state: UNLOCKED."
-      },
-      {
-        id: "check_rabbitmq",
-        name: "Inspect RabbitMQ Outbox Backlog",
-        command: "rabbitmqctl list_queues name messages_ready consumers",
+        id: "check_failed_tx",
+        name: "Query Transactions with FAILED_GATEWAY in Store 402",
+        command: "SELECT transaction_id, store_id, terminal_id, amount, status FROM Transactions WHERE store_id = 402;",
         status: "WARN",
-        output: "Queue: outbox_eft_transactions | Messages Ready: 42 pending | Consumers: 0 (DISCONNECTED from remote exchange)."
-      }
-    ],
-    workarounds: [
-      {
-        id: "restart_eft_service",
-        title: "Restart POS Local EFT Service (POS-EFT-Daemon)",
-        description: "Restarts the local payment handler daemon on Register 1 and 2.",
-        isCorrect: false,
-        feedback: "Restarted POS-EFT-Daemon successfully (PID: 4912), but subsequent card transaction still failed with HTTP 504 because the upstream enterprise network route to CloudHQ (10.200.4.12:5672) is down at the ISP/VPN layer. This is an infrastructure issue requiring Tier 3 Network Escalation."
+        output: "Found 18 records in 'FAILED_GATEWAY' state. Total un-synced value: $1,420.50."
       },
       {
-        id: "clear_cache",
-        title: "Clear In-Memory Browser & POS Cache",
-        description: "Purges temporary browser session data and local storage.",
-        isCorrect: false,
-        feedback: "Cache cleared, but this has no effect on remote EFT socket timeouts on 10.200.4.12:5672."
-      },
-      {
-        id: "switch_offline_mode",
-        title: "Enable Standalone Store Offline Store-and-Forward Mode",
-        description: "Switches POS terminals into encrypted SAF mode for transactions under $50.",
-        isCorrect: true,
-        isMitigationOnly: true,
-        feedback: "Temporary Mitigation: Store-and-Forward mode activated. Transactions under $50 are encrypted and stored locally in Outbox. However, permanent resolution requires L3 Network Escalation to restore the CloudHQ VPN bridge."
+        id: "check_db_integrity",
+        name: "Check Foreign Key Integrity between Orders and Transactions",
+        command: "PRAGMA foreign_key_check;",
+        status: "SUCCESS",
+        output: "0 constraint violations. Relational schema is healthy."
       }
     ],
-    correctResolutionType: "escalate",
-    correctWorkaroundId: null,
-    idealEscalation: {
-      impact: "Store 402 all lanes unable to process live credit/debit card authorizations. High revenue risk during peak hours.",
-      suspectedCause: "Upstream VPN / routing outage to CloudHQ EFT endpoint (10.200.4.12:5672). Local gateway is healthy, but CloudHQ port test fails with 100% timeout.",
-      criticalLog: "HTTP 504 Gateway Timeout - No response from upstream host 10.200.4.12:5672",
-      requiredSteps: "Verified local gateway 192.168.1.1 ping (OK); tested TCP port 5672 to 10.200.4.12 (FAILED); verified RabbitMQ queue has 42 pending transactions; enabled temporary SAF mitigation."
-    }
+    terminalLogs: `[2026-09-30 02:48:12.104] [WARN] [SyncDaemon] 18 records flagged with status 'FAILED_GATEWAY' in table Transactions.
+[2026-09-30 02:48:12.450] [ERROR] [SyncDaemon] Influx queue paused for Store 402: Unresolved error state.
+[2026-09-30 02:48:15.002] [INFO] [L2-Helpdesk] Action Required: Execute SQL fix to reset status to 'PENDING_SYNC'.`
   },
   {
+    id: "INC-10534",
+    envType: "sql",
+    storeId: "Store 201 - Quezon City Megamall",
+    storeName: "SSEQUEL Department Store #201",
+    city: "Quezon City",
+    terminalId: "SRV-201-DB",
+    terminalModel: "In-Store AlaSQL Controller",
+    title: "Clear Stale Transaction Table Locks to Unlock Checkout Registers",
+    severity: "Critical",
+    slaMinutes: 20,
+    openedAt: "8 mins ago",
+    status: "OPEN",
+    category: "SQL Database Troubleshooting",
+    reportedBy: "Jason Cruz (Front-End Lead)",
+    affectedHost: "SRV-201-DB (192.168.2.5)",
+    affectedService: "SQLite WAL Transaction Engine / SystemLocks Table",
+    businessImpact: "Cashiers at all 12 registers cannot tender sales (SQLITE_BUSY error). Checkout queues extending across aisles. Revenue loss > $18,000/hr.",
+    l1TriageNotes: "L1 verified server is powered on and CPU is at 4%. Cashiers restarted POS UI software, but issue persists on basket tender.",
+    timeline: [
+      "02:41:00 AM - EOD inventory stock reconciliation cron job (PID 8812) acquired EXCLUSIVE lock on 'Orders'.",
+      "02:41:05 AM - Worker process crashed abnormally (SIGSEGV) without executing lock release cleanup.",
+      "02:42:10 AM - Cashiers at Registers 1-12 report spinning wheels on basket tender; error SQLITE_BUSY (5).",
+      "02:45:00 AM - Store Supervisor escalated to L2 NOC Helpdesk as P1 Critical Revenue Blocker."
+    ],
+    incidentNarrative: "A crashed nightly inventory process left an orphaned exclusive lock record in the 'SystemLocks' table for table_name 'Orders'. Because SQLite in-store database relies on cooperative locking, all 12 cashier terminals are blocked with SQLITE_BUSY (5) error on INSERT. Checkout lines are backing up during store trading.",
+    incidentObjective: "Write a SQL DELETE query to remove the orphaned lock from 'SystemLocks' where table_name = 'Orders' and lock_type = 'EXCLUSIVE'.",
+    starterCode: `-- Write a SQL DELETE statement to release the orphaned exclusive lock on 'Orders'
+DELETE FROM SystemLocks
+WHERE ...;`,
+    expectedSolution: `DELETE FROM SystemLocks WHERE table_name = 'Orders' AND lock_type = 'EXCLUSIVE';`,
+    validationKeywords: ["delete", "from", "systemlocks", "where", "orders"],
+    validationRegex: [/delete\s+from\s+systemlocks/i, /table_name\s*=\s*['"]Orders['"]/i],
+    verificationExplanation: "Deleting the orphaned EXCLUSIVE lock record from SystemLocks immediately releases the table mutex, allowing POS lanes 1 through 12 to resume checkout write operations without restart.",
+    hints: [
+      "Target table: SystemLocks",
+      "Condition: table_name = 'Orders' AND lock_type = 'EXCLUSIVE'",
+      "Always inspect with SELECT before running DELETE"
+    ],
+    diagnosticChecks: [
+      {
+        id: "check_locks",
+        name: "Inspect Active Locks in SystemLocks Table",
+        command: "SELECT lock_id, table_name, lock_type, acquired_by_pid, created_at FROM SystemLocks;",
+        status: "FAILED",
+        output: "LockID: LCK-8812 | Table: Orders | Type: EXCLUSIVE | PID: 8812 (DEAD / ZOMBIE) | Age: 42 mins."
+      }
+    ],
+    terminalLogs: `[2026-09-30 02:41:05.890] [ERROR] [Worker-PID-8812] Process terminated abnormally (SIGSEGV).
+[2026-09-30 02:41:10.005] [ERROR] [POS-Lanes] SQLITE_BUSY: Table 'Orders' locked by LockID LCK-8812.
+[2026-09-30 02:41:15.000] [CRITICAL] [NOC] 12 registers unable to save completed baskets. ERR_DB_LOCK.`
+  },
+  {
+    id: "INC-10582",
+    envType: "sql",
+    storeId: "Store 501 - Pasig Mega Mart",
+    storeName: "SSEQUEL Mart #501",
+    city: "Pasig City",
+    terminalId: "SRV-501-SYNC",
+    terminalModel: "Store Server Pro",
+    title: "Repair Corrupted Terminal Offline Flag for Store 501 Registers",
+    severity: "High",
+    slaMinutes: 25,
+    openedAt: "12 mins ago",
+    status: "OPEN",
+    category: "SQL Database Troubleshooting",
+    reportedBy: "District Ops Tech",
+    affectedHost: "SRV-501-SYNC (192.168.5.1)",
+    affectedService: "Fleet Topology Router / Terminals Registry Table",
+    businessImpact: "Terminals REG-501-01 and REG-501-02 are rejecting customer transactions because the central router believes they are offline. Store operating at 50% capacity.",
+    l1TriageNotes: "L1 verified physical terminals are powered on and pingable. Issue is an out-of-sync database flag in the server's 'Terminals' table.",
+    timeline: [
+      "02:00:00 AM - Scheduled network switch maintenance caused a brief 30-second ARP re-convergence.",
+      "02:00:11 AM - Fleet monitor marked REG-501-01 and REG-501-02 as 'OFFLINE' in the database.",
+      "02:02:00 AM - Network restored, but automated heartbeat reconciliation missed these two records.",
+      "02:15:00 AM - Cashiers unable to log in; POS UI shows 'Terminal disabled by Fleet Controller'."
+    ],
+    incidentNarrative: "Terminals REG-501-01 and REG-501-02 were marked as 'OFFLINE' in the 'Terminals' table during a scheduled router switch failover. Although the hardware is fully operational and healthy, the backend transaction router refuses to route orders to terminals marked OFFLINE in the database registry.",
+    incidentObjective: "Write a SQL query to UPDATE the 'Terminals' table, setting 'status' = 'ONLINE' for terminals belonging to store_id = 501 where status is currently 'OFFLINE'.",
+    starterCode: `-- Update the Terminals table to restore status to 'ONLINE' for Store 501
+UPDATE Terminals
+SET status = 'ONLINE'
+WHERE ...;`,
+    expectedSolution: `UPDATE Terminals SET status = 'ONLINE' WHERE store_id = 501 AND status = 'OFFLINE';`,
+    validationKeywords: ["update", "terminals", "set", "status", "online", "501"],
+    validationRegex: [/update\s+terminals\s+set\s+status\s*=\s*['"]ONLINE['"]/i, /(store_id\s*=\s*501|501)/i],
+    verificationExplanation: "Updating Terminals table status to 'ONLINE' for store_id 501 allows the front-end transaction routing balancer to start directing checkout customer traffic to registers 1 and 2.",
+    hints: [
+      "Table: Terminals",
+      "Set: status = 'ONLINE'",
+      "Filter: store_id = 501 AND status = 'OFFLINE'"
+    ],
+    diagnosticChecks: [
+      {
+        id: "check_terminals_status",
+        name: "Query Terminals Status in Store 501",
+        command: "SELECT terminal_id, store_id, model, status, last_ping FROM Terminals WHERE store_id = 501;",
+        status: "WARN",
+        output: "REG-501-01: OFFLINE | REG-501-02: OFFLINE | REG-501-03: ONLINE | REG-501-04: ONLINE."
+      }
+    ],
+    terminalLogs: `[2026-09-30 02:00:10.890] [INFO] [FleetMonitor] Checking active terminal registry...
+[2026-09-30 02:00:11.120] [WARN] [Router] 2 registers marked OFFLINE in local database registry.
+[2026-09-30 02:05:00.000] [ERROR] [POS-Router] Rejecting incoming basket: REG-501-01 status is OFFLINE.`
+  },
+
+  // =========================================================================
+  // POWERSHELL TROUBLESHOOTING INCIDENTS
+  // =========================================================================
+  {
     id: "INC-10518",
+    envType: "powershell",
     storeId: "Store 104 - Makati Central",
     storeName: "SSEQUEL Hypermarket #104",
     city: "Makati City",
     terminalId: "REG-104-03",
     terminalModel: "Epson TM-T88VI / NCR POS",
-    title: "Thermal Printer Spooler Deadlock (ERR_PRINTER_OFFLINE)",
+    title: "Restart Stopped Windows Print Spooler Service on Register 3",
     severity: "Medium",
     slaMinutes: 30,
-    openedAt: "18 mins ago",
+    openedAt: "10 mins ago",
     status: "OPEN",
-    category: "Peripheral / Hardware",
+    category: "PowerShell System & Service Automation",
     reportedBy: "Carlo D. (Cashier Lane 3)",
-    customerStatement: "Register 3 suddenly stopped printing receipts. When we press Print, the screen says 'Printer not responding (0x800706BA)'. The blue power light on the Epson printer is solid on, paper roll is full, but nothing prints.",
-    terminalLogs: `[2026-09-30 02:30:11.002] [INFO] [PrintManager] PrintJob #8819 submitted for Order #ORD-9912
-[2026-09-30 02:30:11.015] [DEBUG] [Spooler-Win32] OpenPrinterHandle('EPSON_TM_T88VI_USB') returned HANDLE: 0x4A10
-[2026-09-30 02:30:16.120] [WARN] [Spooler-Win32] Spooler RPC communication timeout. Error: 0x800706BA (RPC Server Unavailable)
-[2026-09-30 02:30:16.125] [ERROR] [PrintManager] Spooler deadlock detected: 4 print jobs frozen in queue 'EPSON_TM_T88VI_USB'
-[2026-09-30 02:30:16.128] [ERROR] [POS-Core] Device status: OFFLINE. Error code: ERR_PRINTER_OFFLINE`,
+    affectedHost: "REG-104-03 (Windows 10 IoT Enterprise)",
+    affectedService: "Windows Print Spooler Service (spoolsv.exe / Spooler)",
+    businessImpact: "Lane 3 cannot print customer receipts or tender slips. Cashiers are having to void orders and move customers to Lane 4, causing 15-minute checkout delays.",
+    l1TriageNotes: "L1 tried turning the physical printer off and on. Printer power LED is green and paper feed test prints OK, but Windows OS reports service stopped.",
+    timeline: [
+      "02:28:10 AM - Cashier attempted printing a 48-item end-of-shift reconciliation report.",
+      "02:30:16 AM - Windows spooler process encountered an unhandled RPC exception (0x800706BA).",
+      "02:30:17 AM - Service Control Manager (SCM) marked 'Spooler' as Stopped.",
+      "02:35:00 AM - Cashier reported error ERR_PRINTER_OFFLINE to Store Lead, escalated to L2."
+    ],
+    incidentNarrative: "On Register 3 (REG-104-03), the Windows Print Spooler service ('Spooler') crashed and terminated due to an RPC communication timeout when processing a bulk print job. Because the service is stopped, the POS application cannot send receipt rendering jobs to the local Epson TM-T88VI driver.",
+    incidentObjective: "Execute the PowerShell cmdlet to restart the Windows Print Spooler service (Name: 'Spooler') with the -Force parameter.",
+    starterCode: `# Write the PowerShell cmdlet to restart the Spooler service
+Restart-Service -Name "Spooler" -Force`,
+    expectedSolution: `Restart-Service -Name "Spooler" -Force`,
+    validationKeywords: ["restart-service", "spooler"],
+    validationRegex: [/restart-service\s+(-name\s+)?['"]?spooler['"]?/i],
+    verificationExplanation: "Executing 'Restart-Service -Name Spooler -Force' purges the hung RPC thread handle in spoolsv.exe, restarts the background printer subsystem, and allows Epson TM-T88VI to resume printing receipts.",
+    hints: [
+      "Cmdlet: Restart-Service",
+      "Service Name: 'Spooler' or Spooler",
+      "Add flag: -Force"
+    ],
     diagnosticChecks: [
       {
-        id: "check_spooler",
+        id: "check_spooler_svc",
         name: "Check Windows Print Spooler Service Status",
         command: "Get-Service -Name Spooler",
-        status: "WARN",
-        output: "Status: Stopped | ServiceName: Spooler | DisplayName: Print Spooler | StartType: Automatic | CrashReason: Corrupted buffer in spoolsv.exe."
-      },
-      {
-        id: "check_usb",
-        name: "Inspect USB Peripheral Bus Enumeration",
-        command: "Get-PnpDevice -Class 'Printer' -Status 'OK'",
-        status: "SUCCESS",
-        output: "DeviceID: USB\\VID_04B8&PID_0202 (EPSON TM-T88VI) | Status: OK | Driver: epson_tm_v8.sys | Connection: High-Speed USB 2.0 Port 3."
-      },
-      {
-        id: "check_disk",
-        name: "Check C:\\Windows\\System32\\spool\\PRINTERS directory",
-        command: "Get-ChildItem C:\\Windows\\System32\\spool\\PRINTERS",
-        status: "WARN",
-        output: "Directory has 4 orphaned .SHD and .SPL locked files (Total: 12.4 MB) causing RPC deadlock."
-      }
-    ],
-    workarounds: [
-      {
-        id: "clear_spooler_restart",
-        title: "Flush Spooler Directory (.SHD/.SPL) and Restart Spooler Service",
-        description: "Kills stuck spoolsv process, purges orphaned queue files in C:\\Windows\\System32\\spool\\PRINTERS, and starts Print Spooler service.",
-        isCorrect: true,
-        feedback: "SUCCESS: Corrupt spool files deleted and Print Spooler service restarted (PID: 3824). Register 3 successfully printed test receipt. Ticket resolved at L2!"
-      },
-      {
-        id: "reinstall_pos_app",
-        title: "Full POS Application Reinstall",
-        description: "Uninstalls and re-downloads the entire 2GB POS client application.",
-        isCorrect: false,
-        feedback: "Unnecessary 45-minute downtime. The issue is a standard OS Print Spooler deadlock, not a corrupted POS binary."
-      },
-      {
-        id: "reboot_terminal",
-        title: "Reboot Terminal Without Clearing Spooler",
-        description: "Performs standard OS restart.",
-        isCorrect: false,
-        feedback: "Reboot completed, but the corrupted .SHD files in C:\\Windows\\System32\\spool\\PRINTERS immediately caused spoolsv.exe to freeze again upon boot."
-      }
-    ],
-    correctResolutionType: "workaround",
-    correctWorkaroundId: "clear_spooler_restart",
-    idealEscalation: {
-      impact: "Not required — resolvable at L2 via standard spooler flush.",
-      suspectedCause: "Orphaned print job deadlock in Windows spooler.",
-      criticalLog: "Error: 0x800706BA (RPC Server Unavailable) / ERR_PRINTER_OFFLINE",
-      requiredSteps: "Inspected spooler service; deleted .SHD/.SPL lockfiles; restarted Spooler service."
-    }
-  },
-  {
-    id: "INC-10534",
-    storeId: "Store 201 - Quezon City Megamall",
-    storeName: "SSEQUEL Department Store #201",
-    city: "Quezon City",
-    terminalId: "Store Server (SRV-201-DB)",
-    terminalModel: "Ubuntu Linux In-Store Controller",
-    title: "Database Exclusive Write Lock Deadlock (ERR_DB_LOCK)",
-    severity: "Critical",
-    slaMinutes: 20,
-    openedAt: "12 mins ago",
-    status: "OPEN",
-    category: "Database & Concurrency",
-    reportedBy: "Jason Cruz (Store Operations)",
-    customerStatement: "All 12 registers across the whole store are showing spinning wheels on tender checkout. Cashiers cannot save completed transactions. Screen displays 'Database transaction timeout: Locked by process'.",
-    terminalLogs: `[2026-09-30 02:41:00.112] [INFO] [EOD-Worker] Background EOD stock reconciliation job started (PID: 8812)
-[2026-09-30 02:41:00.118] [WARN] [SQLite-Engine] EXCLUSIVE table lock acquired on table 'Orders' and 'OrderItems' by PID 8812
-[2026-09-30 02:41:05.890] [ERROR] [EOD-Worker] Process 8812 encountered SIGSEGV while parsing corrupt barcode index. Worker crashed without releasing EXCLUSIVE lock!
-[2026-09-30 02:41:10.005] [ERROR] [POS-Lane-01] INSERT INTO Orders failed: SQLITE_BUSY (5) - database is locked
-[2026-09-30 02:41:10.008] [ERROR] [POS-Lane-02] INSERT INTO Orders failed: SQLITE_BUSY (5) - database is locked
-[2026-09-30 02:41:10.012] [ERROR] [POS-Lane-03] INSERT INTO Orders failed: SQLITE_BUSY (5) - database is locked
-[2026-09-30 02:41:15.000] [CRITICAL] [HealthMonitor] 12 POS lanes blocked waiting for SQLite lock release. Error: ERR_DB_LOCK`,
-    diagnosticChecks: [
-      {
-        id: "check_db_processes",
-        name: "Inspect Active In-Store Database Connection Pool",
-        command: "fuser -v /var/data/pos_store.db",
         status: "FAILED",
-        output: "Zombie Lock File Detected: /var/data/pos_store.db-journal owned by crashed PID 8812 (state: zombie/defunct). 12 threads in D-state waiting on mutex."
-      },
-      {
-        id: "check_disk_space",
-        name: "Check Store Controller Disk Space & Inodes",
-        command: "df -h /var/data",
-        status: "SUCCESS",
-        output: "Filesystem: /dev/sda1 | Size: 250G | Used: 42G (18%) | Avail: 198G | Inodes: 94% free. Disk space is NOT the issue."
-      },
-      {
-        id: "test_db_query",
-        name: "Test Direct Read Query on Stores Table",
-        command: "sqlite3 /var/data/pos_store.db 'SELECT COUNT(*) FROM Stores;'",
-        status: "WARN",
-        output: "Read Query OK (Count: 1). Write Queries (INSERT/UPDATE): SQLITE_BUSY (Database is locked)."
+        output: "Status: Stopped | Name: Spooler | DisplayName: Print Spooler | StartType: Automatic."
       }
     ],
-    workarounds: [
-      {
-        id: "kill_zombie_and_unlock",
-        title: "Kill Zombie PID 8812 & Execute WAL Database Checkpoint / Unlock Procedure",
-        description: "Terminates the defunct worker process, clears stale WAL shm/wal lock handles, and runs 'PRAGMA wal_checkpoint(TRUNCATE);'.",
-        isCorrect: true,
-        feedback: "SUCCESS: Zombie lock removed, database unlocked and rolled back cleanly. All 12 POS registers successfully resumed checkout within 4 seconds. Ticket resolved at L2!"
-      },
-      {
-        id: "delete_database",
-        title: "Delete /var/data/pos_store.db File and Recreate Empty Tables",
-        description: "Drops the active store database to clear the lock.",
-        isCorrect: false,
-        feedback: "CATASTROPHIC ACTION: Deleting the active store database destroys all today's un-synced orders and transactions! Never delete the production database."
-      },
-      {
-        id: "restart_cashier_registers",
-        title: "Reboot All 12 Cashier Registers",
-        description: "Reboots client terminals.",
-        isCorrect: false,
-        feedback: "The lock resides on the central Store Controller (/var/data/pos_store.db). Rebooting the registers does not clear the zombie lock on the store server."
-      }
-    ],
-    correctResolutionType: "workaround",
-    correctWorkaroundId: "kill_zombie_and_unlock",
-    idealEscalation: {
-      impact: "Entire store unable to checkout.",
-      suspectedCause: "Zombie process 8812 holding exclusive write lock.",
-      criticalLog: "SQLITE_BUSY (5) - database is locked / ERR_DB_LOCK",
-      requiredSteps: "Identified zombie PID 8812; terminated defunct lock handle; ran WAL checkpoint."
-    }
-  },
-  {
-    id: "INC-10555",
-    storeId: "Store 305 - Davao Ecoland",
-    storeName: "SSEQUEL Convenience #305",
-    city: "Davao City",
-    terminalId: "REG-305-01",
-    terminalModel: "Honeywell Xenon 1900G / NCR 70",
-    title: "USB Barcode Scanner Sending Garbled Characters (ERR_BARCODE_MALFUNCTION)",
-    severity: "Low",
-    slaMinutes: 45,
-    openedAt: "25 mins ago",
-    status: "OPEN",
-    category: "Peripheral / Hardware",
-    reportedBy: "Ana Belen (Cashier)",
-    customerStatement: "Whenever I scan a carton of milk (UPC 049000000443), the POS screen enters weird symbols like '@#49000&443' and says 'Product Not Found'. Manual barcode typing works fine.",
-    terminalLogs: `[2026-09-30 02:15:30.450] [DEBUG] [HID-Keyboard] Raw HID keystroke input received on /dev/input/event3 (Honeywell 1900G)
-[2026-09-30 02:15:30.455] [WARN] [Scanner-Driver] Non-standard keyboard layout detected: active layout is FR-BE (French-Belgian Azerty) instead of US-English QWERTY!
-[2026-09-30 02:15:30.460] [INFO] [POS-Input] Barcode received: '@#49000&443' (Mapped from shifted Azerty digits)
-[2026-09-30 02:15:30.465] [WARN] [CatalogSearch] SELECT * FROM Products WHERE Barcode = '@#49000&443' returned 0 records.
-[2026-09-30 02:15:30.470] [ERROR] [POS-UI] Error notification: ERR_BARCODE_MALFUNCTION - Product Not Found`,
-    diagnosticChecks: [
-      {
-        id: "check_keyboard_layout",
-        name: "Check POS OS Active Keyboard Layout & Scanner Profile",
-        command: "Get-WinUserLanguageList",
-        status: "WARN",
-        output: "Active OS Input Locale: fr-BE (Azerty) - Accidental shortcut Ctrl+Shift was triggered by cashier, changing keyboard map."
-      },
-      {
-        id: "check_scanner_hardware",
-        name: "Verify Honeywell Hardware Self-Diagnostic",
-        command: "Test-ScannerHealth -Port USB",
-        status: "SUCCESS",
-        output: "Optical sensor: 100% | Laser Aim: OK | Firmware: v1.42 (Latest) | Hardware health: 100% HEALTHY."
-      }
-    ],
-    workarounds: [
-      {
-        id: "reset_input_locale",
-        title: "Reset OS Input Locale to 'en-US' and Lock Language Bar",
-        description: "Switches keyboard input mapping back to standard US QWERTY and disables keyboard layout hotkeys.",
-        isCorrect: true,
-        feedback: "SUCCESS: Keyboard input locale reset to en-US. Barcode scan now immediately returns clean '049000000443' and item loads into basket. Issue resolved!"
-      },
-      {
-        id: "replace_scanner",
-        title: "Request Overnight Hardware Replacement for Honeywell Scanner",
-        description: "Dispatches a new scanner unit via courier.",
-        isCorrect: false,
-        feedback: "Unnecessary equipment replacement cost ($350). The scanner hardware is in perfect working order; only the OS keyboard language setting was changed."
-      }
-    ],
-    correctResolutionType: "workaround",
-    correctWorkaroundId: "reset_input_locale",
-    idealEscalation: {
-      impact: "Single register barcode misreads.",
-      suspectedCause: "Keyboard input locale switched to Azerty.",
-      criticalLog: "Non-standard keyboard layout detected / ERR_BARCODE_MALFUNCTION",
-      requiredSteps: "Checked active input locale; restored en-US QWERTY."
-    }
-  },
-  {
-    id: "INC-10582",
-    storeId: "Store 501 - Pasig Mega Mart",
-    storeName: "SSEQUEL Mart #501",
-    city: "Pasig City",
-    terminalId: "Store Server & Cloud Sync Daemon",
-    terminalModel: "NCR Store Server Pro",
-    title: "RabbitMQ Transaction Sync Backlog (ERR_SYNC_TIMEOUT)",
-    severity: "High",
-    slaMinutes: 30,
-    openedAt: "15 mins ago",
-    status: "OPEN",
-    category: "Data Synchronization",
-    reportedBy: "Central ERP Monitoring Bot",
-    customerStatement: "Store 501 has 890 sales orders stuck in 'pending_sync' state. Enterprise reporting is 4 hours behind for this store. In-store registers are working, but data is not reaching CloudHQ.",
-    terminalLogs: `[2026-09-30 02:00:10.890] [INFO] [SyncWorker] Starting batch sync for 100 orders...
-[2026-09-30 02:00:11.120] [ERROR] [RabbitMQ-Client] AMQP connection handshake failed on amqp://cloudhq.retail.internal:5672
-[2026-09-30 02:00:11.125] [ERROR] [RabbitMQ-Client] Reason: PRECONDITION_FAILED - unknown exchange 'pos.transactions.v2' (404 NOT_FOUND)
-[2026-09-30 02:00:11.130] [CRITICAL] [SyncWorker] Message broker rejected exchange name. Sync daemon paused in retry loop (Backoff: 60s).
-[2026-09-30 02:00:11.135] [ERROR] [Telemetry] Error code: ERR_SYNC_TIMEOUT - 890 transactions delayed in Outbox queue`,
-    diagnosticChecks: [
-      {
-        id: "check_amqp_config",
-        name: "Audit Local Sync Client Configuration File (/etc/pos/sync.conf)",
-        command: "cat /etc/pos/sync.conf | grep EXCHANGE",
-        status: "WARN",
-        output: "EXCHANGE_NAME=pos.transactions.v2 (Deprecated during yesterday's CloudHQ migration; CloudHQ now uses 'pos.transactions.v3')."
-      },
-      {
-        id: "ping_amqp_host",
-        name: "Test Network Connectivity to amqp://cloudhq.retail.internal:5672",
-        command: "nc -zv cloudhq.retail.internal 5672",
-        status: "SUCCESS",
-        output: "Connection to cloudhq.retail.internal 5672 port [tcp/amqp] succeeded! Network path is OPEN."
-      }
-    ],
-    workarounds: [
-      {
-        id: "update_exchange_and_resync",
-        title: "Update /etc/pos/sync.conf to Exchange 'pos.transactions.v3' & Restart Sync Service",
-        description: "Corrects the AMQP exchange name to match the updated CloudHQ schema and forces queue replay.",
-        isCorrect: true,
-        feedback: "SUCCESS: Exchange updated to 'pos.transactions.v3' and sync service restarted. All 890 backlogged records successfully flushed to CloudHQ in 18 seconds. Backlog cleared!"
-      },
-      {
-        id: "truncate_outbox",
-        title: "Purge and Truncate Outbox Table to Clear Count",
-        description: "Executes DELETE FROM Outbox_Sync.",
-        isCorrect: false,
-        feedback: "DATA LOSS: Purging the table deletes $42,000 in un-synced store sales records without transmitting them to financial accounting!"
-      }
-    ],
-    correctResolutionType: "workaround",
-    correctWorkaroundId: "update_exchange_and_resync",
-    idealEscalation: {
-      impact: "890 orders delayed in cloud sync.",
-      suspectedCause: "Outdated AMQP exchange name in sync.conf.",
-      criticalLog: "PRECONDITION_FAILED - unknown exchange 'pos.transactions.v2' / ERR_SYNC_TIMEOUT",
-      requiredSteps: "Verified AMQP network reachable; identified exchange version mismatch; updated sync.conf."
-    }
-  },
-  {
-    id: "INC-10601",
-    storeId: "Store 112 - Ortigas Express",
-    storeName: "SSEQUEL Express #112",
-    city: "Pasig City",
-    terminalId: "Store Gateway (RTR-112)",
-    terminalModel: "Cisco RV340 / Fiber ONT",
-    title: "Complete Store Server Outage (ERR_STORE_SERVER_OFFLINE)",
-    severity: "Critical",
-    slaMinutes: 15,
-    openedAt: "8 mins ago",
-    status: "OPEN",
-    category: "Store Server Outage",
-    reportedBy: "Derrick Lim (District Tech)",
-    customerStatement: "Store 112 is completely dark. All registers are unable to reach the store server (192.168.1.100). Store staff report a burning smell near the back-office server rack and the UPS battery is beeping continuously.",
-    terminalLogs: `[2026-09-30 02:52:00.010] [CRITICAL] [Watchdog] Heartbeat lost for In-Store Server 192.168.1.100
-[2026-09-30 02:52:05.120] [ERROR] [POS-Lane-01] Unable to reach Store Controller: Host Unreachable (192.168.1.100)
-[2026-09-30 02:52:05.125] [ERROR] [POS-Lane-02] Unable to reach Store Controller: Host Unreachable (192.168.1.100)
-[2026-09-30 02:52:10.000] [ALERT] [UPS-SNMP] APC Smart-UPS 1500: On-Battery event, Output Overload (120%), Inverter Fault!
-[2026-09-30 02:52:12.000] [CRITICAL] [NOC] Store 112 classified as HARDWARE_POWER_FAILURE. Code: ERR_STORE_SERVER_OFFLINE`,
-    diagnosticChecks: [
-      {
-        id: "ping_server",
-        name: "Ping In-Store Server (192.168.1.100)",
-        command: "ping -c 4 192.168.1.100",
-        status: "FAILED",
-        output: "Destination Host Unreachable. 100% packet loss. Server hardware has completely lost electrical power."
-      },
-      {
-        id: "check_ups_snmp",
-        name: "Query UPS Battery Management SNMP Agent",
-        command: "snmpwalk -v2c -c public 192.168.1.5 .1.3.6.1.4.1.318",
-        status: "FAILED",
-        output: "UPS Hardware Fault: Inverter blown, burning odor reported on-site. AC output disconnected to prevent fire."
-      }
-    ],
-    workarounds: [
-      {
-        id: "remote_reboot",
-        title: "Send Remote IPMI Reboot Command",
-        description: "Attempts out-of-band IPMI power-on signal.",
-        isCorrect: false,
-        feedback: "IPMI unreachable. The physical UPS has tripped its breaker and has zero electrical output. Remote commands cannot power on physical equipment without AC electricity."
-      },
-      {
-        id: "software_restart",
-        title: "Restart POS Application Server Service",
-        description: "Attempts SSH connection.",
-        isCorrect: false,
-        feedback: "SSH Connection timed out: No route to host. The machine is physically unpowered."
-      }
-    ],
-    correctResolutionType: "escalate",
-    correctWorkaroundId: null,
-    idealEscalation: {
-      impact: "Store 112 completely offline; all POS registers dead. Store unable to trade.",
-      suspectedCause: "Physical hardware power failure in back-office UPS / Server PSU with burning odor.",
-      criticalLog: "APC Smart-UPS 1500: Output Overload / Inverter Fault / ERR_STORE_SERVER_OFFLINE",
-      requiredSteps: "Verified ping to 192.168.1.100 failed; confirmed UPS SNMP inverter failure; instructed store staff to isolate breaker and requested emergency On-Site Field Engineer dispatch."
-    }
+    terminalLogs: `[2026-09-30 02:30:16.120] [WARN] [Spooler-Win32] Spooler RPC communication timeout. Error: 0x800706BA.
+[2026-09-30 02:30:16.128] [ERROR] [POS-Core] Device status: OFFLINE. Code: ERR_PRINTER_OFFLINE.
+[2026-09-30 02:30:17.001] [CRITICAL] [SCM] Service 'Spooler' entered the STOPPED state unexpectedly.`
   },
   {
     id: "INC-10640",
+    envType: "powershell",
     storeId: "Store 302 - BGC Central",
     storeName: "SSEQUEL Department #302",
     city: "Taguig City",
-    terminalId: "REG-302-04",
-    terminalModel: "Verifone M400 / NCR RealPOS",
-    title: "Verifone PIN Pad Serial Baud Rate Mismatch (ERR_PINPAD_COMM)",
-    severity: "High",
-    slaMinutes: 30,
-    openedAt: "4 mins ago",
+    terminalId: "REG-302-01",
+    terminalModel: "NCR RealPOS 70 (Win10 IoT)",
+    title: "Force Terminate Stuck Payment Gateway Process and Relaunch Daemon",
+    severity: "Critical",
+    slaMinutes: 15,
+    openedAt: "3 mins ago",
     status: "OPEN",
-    category: "Payment Gateway",
+    category: "PowerShell System & Service Automation",
     reportedBy: "Grace Tan (Supervisor)",
-    customerStatement: "Register 4 PIN pad shows 'CONNECTING...' indefinitely on card insert. Cashier terminal log says 'Serial Port COM3 parity error / unexpected baud rate'.",
-    terminalLogs: `[2026-09-30 02:55:01.210] [INFO] [EFT-Driver] Initializing RS232 Serial Port COM3...
-[2026-09-30 02:55:01.220] [DEBUG] [EFT-Driver] Configured COM3: Baud=9600, DataBits=8, Parity=None, StopBits=1
-[2026-09-30 02:55:04.300] [ERROR] [EFT-Driver] Framing error on COM3: Verifone M400 firmware expecting 115200 baud!
-[2026-09-30 02:55:05.100] [CRITICAL] [EFT-Driver] Handshake failed after 3 attempts. Error: ERR_PINPAD_COMM`,
+    affectedHost: "REG-302-01 (192.168.3.11)",
+    affectedService: "EFT Gateway Daemon / pos_eft_daemon.exe (PID 4892)",
+    businessImpact: "Primary checkout terminal frozen at 'Authorizing Pinpad...' step. Card reader cannot initialize new sessions. Customer line halted.",
+    l1TriageNotes: "L1 tried clicking 'Cancel' on the POS screen, but application is unresponsive due to socket lock held by pos_eft_daemon.",
+    timeline: [
+      "02:54:10 AM - Customer tapped contactless Visa card during an unstable TLS handshake.",
+      "02:55:04 AM - Daemon entered an uninterruptible deadlocked socket state holding port 5672.",
+      "02:55:05 AM - Watchdog sent SIGTERM, but process failed to terminate gracefully.",
+      "02:56:00 AM - Cashier escalated P1 Critical ticket to L2 Support."
+    ],
+    incidentNarrative: "The local payment client process 'pos_eft_daemon.exe' has frozen in an uninterruptible deadlock state, consuming 99.8% CPU on Core 0 and locking TCP socket port 5672. The POS application watchdog cannot start a fresh daemon instance until this hung process PID is forcibly terminated.",
+    incidentObjective: "Write a PowerShell command using 'Stop-Process' to forcibly kill the process named 'pos_eft_daemon' with the -Force parameter.",
+    starterCode: `# Write the PowerShell command to terminate the hung pos_eft_daemon process
+Stop-Process -Name "pos_eft_daemon" -Force`,
+    expectedSolution: `Stop-Process -Name "pos_eft_daemon" -Force`,
+    validationKeywords: ["stop-process", "pos_eft_daemon"],
+    validationRegex: [/stop-process\s+(-name\s+)?['"]?pos_eft_daemon['"]?/i],
+    verificationExplanation: "Executing 'Stop-Process -Name pos_eft_daemon -Force' frees the locked socket handle on TCP port 5672, allowing the watchdog manager to auto-respawn a clean EFT worker instance.",
+    hints: [
+      "Cmdlet: Stop-Process",
+      "Name: 'pos_eft_daemon'",
+      "Add parameter: -Force"
+    ],
     diagnosticChecks: [
       {
-        id: "check_com_port",
-        name: "Query POS Peripheral Serial Port Configuration",
-        command: "Get-WmiObject Win32_SerialPort | Select Name, BaudRate",
-        status: "WARN",
-        output: "Port: COM3 | CurrentBaud: 9600 | RequiredDeviceBaud: 115200 (Mismatch detected)."
-      },
-      {
-        id: "test_pinpad_echo",
-        name: "Send Verifone Terminal Ping Command (ENQ/ACK)",
-        command: "Test-PinPadComm -Port COM3",
+        id: "check_proc",
+        name: "Check Process State for pos_eft_daemon",
+        command: "Get-Process -Name pos_eft_daemon | Select Id, ProcessName, Responding, CPU",
         status: "FAILED",
-        output: "Response: NO_ACK (Framing Error). Device is powered on but cannot parse 9600 baud serial stream."
+        output: "Id: 4892 | ProcessName: pos_eft_daemon | Responding: False (DEADLOCK) | CPU: 99.8%."
       }
     ],
-    workarounds: [
-      {
-        id: "fix_baud_rate",
-        title: "Update COM3 Baud Rate to 115200 in /etc/pos/eft.json & Reload Daemon",
-        description: "Sets baud rate to 115200 to match Verifone M400 firmware specification.",
-        isCorrect: true,
-        feedback: "SUCCESS: Baud rate synchronized to 115200. Verifone PIN pad completed ENQ/ACK handshake in 200ms. Test card tap successful!"
-      },
-      {
-        id: "replace_pinpad",
-        title: "RMA Replace PIN Pad Hardware",
-        description: "Dispatches courier replacement.",
-        isCorrect: false,
-        feedback: "Unnecessary hardware swap. The device hardware is completely intact; only the driver baud rate setting was misconfigured."
-      }
-    ],
-    correctResolutionType: "workaround",
-    correctWorkaroundId: "fix_baud_rate",
-    idealEscalation: {
-      impact: "Single register PIN pad unable to process cards.",
-      suspectedCause: "Serial COM3 baud rate mismatch (9600 vs 115200).",
-      criticalLog: "Framing error on COM3 / ERR_PINPAD_COMM",
-      requiredSteps: "Checked serial port configuration; updated baud rate to 115200; reloaded EFT daemon."
-    }
+    terminalLogs: `[2026-09-30 02:55:04.300] [CRITICAL] [EFT-Core] Thread lockup detected in pos_eft_daemon.exe (PID 4892).
+[2026-09-30 02:55:05.100] [ERROR] [Watchdog] Process not responding to SIGTERM. Forced kill required.
+[2026-09-30 02:55:10.000] [ERROR] [PortManager] Socket 0.0.0.0:5672 remains locked by PID 4892.`
   },
   {
     id: "INC-10677",
+    envType: "powershell",
     storeId: "Store 415 - Cebu Seaside",
     storeName: "SSEQUEL Seaside #415",
     city: "Cebu City",
-    terminalId: "Store Controller (SRV-415-PROMO)",
-    terminalModel: "NCR Promotion Engine V4",
-    title: "Promotional Pricing Engine JSON Deserialization Fault (ERR_PROMO_SYNC_FAIL)",
-    severity: "High",
+    terminalId: "REG-415-02",
+    terminalModel: "Honeywell Scanner & Win10 Terminal",
+    title: "Purge Orphaned Temporary Print Buffer Files (.SPL & .SHD)",
+    severity: "Medium",
     slaMinutes: 30,
-    openedAt: "2 mins ago",
+    openedAt: "6 mins ago",
     status: "OPEN",
-    category: "Data Synchronization",
+    category: "PowerShell System & Service Automation",
     reportedBy: "Karen Cruz (Lead Cashier)",
-    customerStatement: "Whenever cashiers scan items on the 'Weekend 20% OFF' promotion, the POS terminal throws an unhandled exception: 'JSON Syntax Error: Unexpected token in promo payload'.",
-    terminalLogs: `[2026-09-30 02:58:12.450] [INFO] [PromoEngine] Applying campaign 'WEEKEND_20_OFF' (ID: PR-8812)
-[2026-09-30 02:58:12.455] [DEBUG] [PromoEngine] Parsing /var/data/promotions/PR-8812.json...
-[2026-09-30 02:58:12.460] [ERROR] [PromoEngine] SyntaxError: Unexpected trailing comma at line 14, column 8 in PR-8812.json
-[2026-09-30 02:58:12.465] [CRITICAL] [PromoEngine] Promotion calculation aborted. Item priced at standard non-discounted rate!
-[2026-09-30 02:58:12.470] [ERROR] [Telemetry] Error code: ERR_PROMO_SYNC_FAIL`,
+    affectedHost: "REG-415-02 (Windows 10 Enterprise)",
+    affectedService: "C:\\Windows\\System32\\spool\\PRINTERS Spool Queue Directory",
+    businessImpact: "Thermal printer prints gibberish binary characters continuously and jams the paper roll, preventing legitimate customer receipts from printing.",
+    l1TriageNotes: "L1 restarted printer and spooler service, but the moment the spooler starts, it re-reads corrupted .SHD shadow files and resumes printing garbage.",
+    timeline: [
+      "02:57:00 AM - Cashier power-cycled register in the middle of printing an uncompressed graphics logo.",
+      "02:58:12 AM - Partial shadow files (00012.SHD / 00012.SPL) were written to disk with corrupted EOF markers.",
+      "02:59:00 AM - Spooler endlessly loops over corrupted buffer, dumping raw ASCII escape sequences.",
+      "03:00:00 AM - Escalated to L2 to purge the spool directory."
+    ],
+    incidentNarrative: "Corrupted temporary spool files in 'C:\\Windows\\System32\\spool\\PRINTERS' are poisoning the Windows print queue. Whenever the printer service starts, it attempts to parse the corrupted .SHD/.SPL binary buffer and crashes or feeds corrupt raw characters. The entire directory buffer must be purged.",
+    incidentObjective: "Write a PowerShell command using 'Remove-Item' to delete all files in 'C:\\Windows\\System32\\spool\\PRINTERS\\*.*' with the -Force parameter.",
+    starterCode: `# Write a PowerShell cmdlet to remove corrupt spool buffer files
+Remove-Item -Path "C:\\Windows\\System32\\spool\\PRINTERS\\*.*" -Force`,
+    expectedSolution: `Remove-Item -Path "C:\\Windows\\System32\\spool\\PRINTERS\\*.*" -Force`,
+    validationKeywords: ["remove-item", "printers"],
+    validationRegex: [/remove-item\s+(-path\s+)?['"]?.*printers.*['"]?/i],
+    verificationExplanation: "Executing 'Remove-Item C:\\Windows\\System32\\spool\\PRINTERS\\*.* -Force' purges locked .SHD shadow headers and corrupt .SPL raw spool files, resetting the queue to 0 pending jobs.",
+    hints: [
+      "Cmdlet: Remove-Item",
+      "Path: C:\\Windows\\System32\\spool\\PRINTERS\\*.*",
+      "Add flag: -Force"
+    ],
     diagnosticChecks: [
       {
-        id: "validate_promo_json",
-        name: "Validate Local Promotion JSON File Syntax",
-        command: "jq . /var/data/promotions/PR-8812.json",
+        id: "check_spool_dir",
+        name: "List Files in Spool Directory",
+        command: "Get-ChildItem 'C:\\Windows\\System32\\spool\\PRINTERS'",
+        status: "WARN",
+        output: "Found 4 corrupted .SHD and .SPL files: 00012.SHD, 00012.SPL, 00013.SHD, 00013.SPL (Total: 8.4MB)."
+      }
+    ],
+    terminalLogs: `[2026-09-30 02:58:12.460] [ERROR] [Spooler] Corrupt spool file 00012.SHD cannot be deserialized.
+[2026-09-30 02:58:12.470] [WARN] [L2-Ops] Action Required: Purge PRINTERS spool folder using Remove-Item.
+[2026-09-30 02:58:15.002] [ERROR] [PrintDriver] Deserialization failure: buffer length mismatch.`
+  },
+  {
+    id: "INC-10712",
+    envType: "sql",
+    storeId: "Store 101 - Manila Flagship",
+    storeName: "SSEQUEL Flagship #101",
+    city: "Manila",
+    terminalId: "SRV-101-LOYALTY",
+    terminalModel: "Customer Loyalty SQL Database",
+    title: "Repair Corrupted Member Loyalty Balance in Customers Table",
+    severity: "Medium",
+    slaMinutes: 30,
+    openedAt: "5 mins ago",
+    status: "OPEN",
+    category: "SQL Database Troubleshooting",
+    reportedBy: "Store Member Service Lead",
+    affectedHost: "SRV-101-LOYALTY (192.168.1.15)",
+    affectedService: "Customer Rewards Ledger / Customers Table",
+    businessImpact: "VIP Customer (ID 104) at customer service desk demanding point balance correction for a $500 purchase. Customer satisfaction and loyalty retention risk.",
+    l1TriageNotes: "L1 verified the order receipt shows $500 spent with loyalty barcode scanned, but Customers table still shows 0 points.",
+    timeline: [
+      "03:02:10 AM - Customer Elena Gomez purchased items totaling $500.00 at Register 2.",
+      "03:05:10 AM - Database connection timed out during the second stage of the point accrual commit.",
+      "03:06:00 AM - Customer checked mobile app; loyalty_points balance displayed 0 instead of 500.",
+      "03:07:00 AM - Customer Service escalated ticket to L2 database support."
+    ],
+    incidentNarrative: "A VIP customer (customer_id = 104) made a $500 purchase, but a database lock contention timeout during payment settlement aborted the loyalty points accrual sub-transaction, leaving their 'loyalty_points' balance at 0. L2 Support must execute a direct SQL update to correct the ledger balance.",
+    incidentObjective: "Write a SQL UPDATE query to set 'loyalty_points' = 500 in the 'Customers' table for 'customer_id' = 104.",
+    starterCode: `-- Update the Customers table to adjust loyalty points balance for customer 104
+UPDATE Customers
+SET loyalty_points = 500
+WHERE ...;`,
+    expectedSolution: `UPDATE Customers SET loyalty_points = 500 WHERE customer_id = 104;`,
+    validationKeywords: ["update", "customers", "set", "loyalty_points", "500", "104"],
+    validationRegex: [/update\s+customers\s+set\s+loyalty_points\s*=\s*500/i, /customer_id\s*=\s*104/i],
+    verificationExplanation: "Executing UPDATE Customers SET loyalty_points = 500 WHERE customer_id = 104 restores the customer's missing rewards balance and recalculates their VIP tier status.",
+    hints: [
+      "Target table: Customers",
+      "Set column: loyalty_points = 500",
+      "Condition: customer_id = 104"
+    ],
+    diagnosticChecks: [
+      {
+        id: "check_cust_points",
+        name: "Query Customer 104 Profile and Points",
+        command: "SELECT customer_id, first_name, last_name, loyalty_points, tier FROM Customers WHERE customer_id = 104;",
+        status: "WARN",
+        output: "CustomerID: 104 | Name: Elena Gomez | LoyaltyPoints: 0 (DISCREPANCY - Expected: 500)."
+      }
+    ],
+    terminalLogs: `[2026-09-30 03:05:10.120] [WARN] [Loyalty-Engine] Point accrual transaction timed out during commit.
+[2026-09-30 03:05:10.130] [INFO] [L2-Ops] Action Required: Execute SQL UPDATE to restore 500 loyalty points for customer_id 104.`
+  },
+  {
+    id: "INC-10745",
+    envType: "sql",
+    storeId: "Store 308 - BGC High Street",
+    storeName: "SSEQUEL Express #308",
+    city: "Taguig City",
+    terminalId: "SRV-308-AUTH",
+    terminalModel: "In-Store Auth Session DB",
+    title: "Purge Stale Expired Cashier Session Tokens from AuthSessions Table",
+    severity: "Low",
+    slaMinutes: 45,
+    openedAt: "15 mins ago",
+    status: "OPEN",
+    category: "SQL Database Troubleshooting",
+    reportedBy: "Store Shift Manager",
+    affectedHost: "SRV-308-AUTH (192.168.3.20)",
+    affectedService: "Cashier Authentication Service / AuthSessions Table",
+    businessImpact: "Cashier biometric and PIN logins taking 8 to 12 seconds instead of < 1s. Morning shift lane opening delayed.",
+    l1TriageNotes: "L1 verified network latency is < 1ms. Database CPU is normal, but AuthSessions table has ballooned in row count.",
+    timeline: [
+      "02:00:00 AM - Weekly automated session purge maintenance cron failed to execute due to permission misconfiguration.",
+      "03:00:00 AM - Over 512 stale expired cashier tokens remain in the AuthSessions table.",
+      "03:10:00 AM - Morning cashier logins experience full table scan index latency.",
+      "03:12:00 AM - Shift Manager reported login slowness to L2 Helpdesk."
+    ],
+    incidentNarrative: "Over 500 expired cashier login sessions from last week are clogging the 'AuthSessions' table due to a failed maintenance cron job. The unindexed query path causes cashier fingerprint and PIN authentications to experience unacceptable latency.",
+    incidentObjective: "Write a SQL DELETE query to remove all records from the 'AuthSessions' table where 'session_status' = 'EXPIRED'.",
+    starterCode: `-- Write a SQL query to purge expired login sessions
+DELETE FROM AuthSessions
+WHERE ...;`,
+    expectedSolution: `DELETE FROM AuthSessions WHERE session_status = 'EXPIRED';`,
+    validationKeywords: ["delete", "from", "authsessions", "where", "expired"],
+    validationRegex: [/delete\s+from\s+authsessions/i, /session_status\s*=\s*['"]EXPIRED['"]/i],
+    verificationExplanation: "Executing DELETE FROM AuthSessions WHERE session_status = 'EXPIRED' purges 500+ stale session tokens, reclaiming B-Tree index space and accelerating cashier logins.",
+    hints: [
+      "Table: AuthSessions",
+      "Condition: session_status = 'EXPIRED'"
+    ],
+    diagnosticChecks: [
+      {
+        id: "check_expired_sessions",
+        name: "Count Expired Sessions in AuthSessions Table",
+        command: "SELECT session_status, COUNT(*) AS count FROM AuthSessions GROUP BY session_status;",
+        status: "WARN",
+        output: "ACTIVE: 8 sessions | EXPIRED: 512 stale sessions."
+      }
+    ],
+    terminalLogs: `[2026-09-30 03:10:00.005] [WARN] [Auth-Service] AuthSessions table size exceeds threshold (520 rows). High index scan latency.
+[2026-09-30 03:10:02.120] [INFO] [Auth-Service] Average login query time: 8,420ms (Threshold: 500ms).`
+  },
+  {
+    id: "INC-10780",
+    envType: "powershell",
+    storeId: "Store 204 - QC North Mall",
+    storeName: "SSEQUEL Department #204",
+    city: "Quezon City",
+    terminalId: "SRV-204-AMQP",
+    terminalModel: "Windows Server 2022 / AMQP Bridge",
+    title: "Restart Frozen RabbitMQ Enterprise Transaction Sync Client Service",
+    severity: "High",
+    slaMinutes: 25,
+    openedAt: "8 mins ago",
+    status: "OPEN",
+    category: "PowerShell System & Service Automation",
+    reportedBy: "CloudHQ Sync Telemetry",
+    affectedHost: "SRV-204-AMQP (192.168.2.100)",
+    affectedService: "RabbitMQ Transaction Sync Service (RabbitMQ_Sync)",
+    businessImpact: "Live store sales data is not streaming to central cloud dashboards. Inventory re-ordering and financial consolidation pipeline delayed by 45 minutes.",
+    l1TriageNotes: "L1 confirmed TCP port 5672 is reachable to the CloudHQ cluster, but local service is in a hung 'Paused / Socket Wait' state.",
+    timeline: [
+      "03:10:00 AM - CloudHQ AMQP broker performed rolling certificate refresh.",
+      "03:15:20 AM - Local client service failed to renegotiate SSL heartbeat and entered infinite socket wait.",
+      "03:16:00 AM - Outbox messages queued locally (320 messages waiting).",
+      "03:18:00 AM - Telemetry bot generated P2 escalation to L2 NOC."
+    ],
+    incidentNarrative: "The background transaction synchronization service 'RabbitMQ_Sync' has hung in a socket wait state following a TLS heartbeat miss. The service status reports as Paused/Unresponsive, preventing 320 pending store transactions from transmitting to the central cloud enterprise ERP.",
+    incidentObjective: "Execute a PowerShell cmdlet to restart the service named 'RabbitMQ_Sync' with the -Force parameter.",
+    starterCode: `# Write the PowerShell cmdlet to restart the RabbitMQ_Sync service
+Restart-Service -Name "RabbitMQ_Sync" -Force`,
+    expectedSolution: `Restart-Service -Name "RabbitMQ_Sync" -Force`,
+    validationKeywords: ["restart-service", "rabbitmq_sync"],
+    validationRegex: [/restart-service\s+(-name\s+)?['"]?rabbitmq_sync['"]?/i],
+    verificationExplanation: "Executing 'Restart-Service -Name RabbitMQ_Sync -Force' tears down the stuck AMQP socket and restarts message polling, immediately resuming transaction streaming to CloudHQ.",
+    hints: [
+      "Cmdlet: Restart-Service",
+      "Service Name: 'RabbitMQ_Sync'",
+      "Parameter: -Force"
+    ],
+    diagnosticChecks: [
+      {
+        id: "check_amqp_svc",
+        name: "Inspect Status of RabbitMQ_Sync Service",
+        command: "Get-Service -Name RabbitMQ_Sync",
+        status: "WARN",
+        output: "Status: Paused / Unresponsive | ServiceName: RabbitMQ_Sync | DisplayName: RabbitMQ Sync Client."
+      }
+    ],
+    terminalLogs: `[2026-09-30 03:15:20.100] [ERROR] [AMQP-Client] Socket heartbeat missed (120s timeout). Service frozen.
+[2026-09-30 03:15:25.000] [WARN] [BufferManager] 320 outbound messages currently queued in memory.`
+  },
+  {
+    id: "INC-10815",
+    envType: "powershell",
+    storeId: "Store 518 - Davao Central",
+    storeName: "SSEQUEL Hypermarket #518",
+    city: "Davao City",
+    terminalId: "REG-518-01",
+    terminalModel: "Win10 IoT Enterprise Controller",
+    title: "Terminate Runaway Catalog Indexer Memory Leak Process",
+    severity: "High",
+    slaMinutes: 20,
+    openedAt: "4 mins ago",
+    status: "OPEN",
+    category: "PowerShell System & Service Automation",
+    reportedBy: "Davao Shift Lead",
+    affectedHost: "REG-518-01 (192.168.5.12)",
+    affectedService: "Local Catalog Indexer Daemon / catalog_indexer.exe (PID 9140)",
+    businessImpact: "Cashier UI experiencing 4-second stutter on every barcode scan. System memory pressure is at 98%, risking OS kernel crash during trading.",
+    l1TriageNotes: "L1 verified total RAM is 4GB, with 3.8GB consumed by catalog_indexer.exe alone.",
+    timeline: [
+      "03:18:00 AM - Catalog indexing worker started processing updated product promotion price book.",
+      "03:19:30 AM - Regex backtracking bug in description parser triggered an unbounded memory allocation loop.",
+      "03:20:00 AM - Process consumed 3.8GB RAM; Windows OS watchdog triggered memory pressure warning.",
+      "03:21:00 AM - Cashier escalated to L2 as critical POS UI lag."
+    ],
+    incidentNarrative: "A background search indexing process 'catalog_indexer.exe' (PID 9140) has suffered a catastrophic memory leak due to a regex parser bug, consuming 3.8GB of the terminal's 4GB RAM. The resulting page-swapping has caused the cashier checkout interface to stutter severely.",
+    incidentObjective: "Write a PowerShell command using 'Stop-Process' to terminate the process named 'catalog_indexer' with the -Force flag.",
+    starterCode: `# Write the PowerShell command to kill the runaway catalog_indexer process
+Stop-Process -Name "catalog_indexer" -Force`,
+    expectedSolution: `Stop-Process -Name "catalog_indexer" -Force`,
+    validationKeywords: ["stop-process", "catalog_indexer"],
+    validationRegex: [/stop-process\s+(-name\s+)?['"]?catalog_indexer['"]?/i],
+    verificationExplanation: "Executing 'Stop-Process -Name catalog_indexer -Force' terminates the memory-leaking catalog indexer worker and reclaims 3.8GB of system RAM, immediately restoring smooth POS UI response times.",
+    hints: [
+      "Cmdlet: Stop-Process",
+      "Name: 'catalog_indexer'",
+      "Parameter: -Force"
+    ],
+    diagnosticChecks: [
+      {
+        id: "check_memory_proc",
+        name: "Inspect Top Memory Processes",
+        command: "Get-Process -Name catalog_indexer | Select Id, WorkingSet64, CPU",
         status: "FAILED",
-        output: "parse error: Expected another key-value pair at line 14, column 8 (invalid trailing comma)."
-      },
-      {
-        id: "test_cloud_promo_api",
-        name: "Query CloudHQ Promotion Master Catalog API",
-        command: "curl -s http://cloudhq.retail.internal/api/v1/promos/PR-8812",
-        status: "SUCCESS",
-        output: "CloudHQ Master Catalog has valid, verified JSON payload (v1.4, 0 syntax errors)."
+        output: "Id: 9140 | ProcessName: catalog_indexer | WorkingSet: 3,942,100 KB (3.8 GB) | Status: RUNAWAY LEAK."
       }
     ],
-    workarounds: [
-      {
-        id: "force_resync_promo",
-        title: "Force Clean Re-Download of Promotion Cache from CloudHQ API",
-        description: "Purges corrupted local PR-8812.json file and forces fresh pull from CloudHQ master repository.",
-        isCorrect: true,
-        feedback: "SUCCESS: Corrupted local file purged and clean JSON re-downloaded from CloudHQ. Validated with jq (0 errors). Promotions now calculating 20% discount flawlessly!"
-      },
-      {
-        id: "disable_promotions",
-        title: "Disable All Store Discounts System-Wide",
-        description: "Deactivates the promotion calculation engine.",
-        isCorrect: false,
-        feedback: "POOR CUSTOMER EXPERIENCE: Disabling all discounts sparks customer outrage and price discrepancies at checkout."
-      }
-    ],
-    correctResolutionType: "workaround",
-    correctWorkaroundId: "force_resync_promo",
-    idealEscalation: {
-      impact: "Store 415 discounts failing on weekend campaign.",
-      suspectedCause: "Corrupted local promotion JSON file with trailing comma syntax error.",
-      criticalLog: "SyntaxError: Unexpected trailing comma in PR-8812.json / ERR_PROMO_SYNC_FAIL",
-      requiredSteps: "Validated JSON syntax with jq; queried CloudHQ master API; purged and re-synced clean promotion file."
-    }
+    terminalLogs: `[2026-09-30 03:20:00.890] [CRITICAL] [OS-Watchdog] Memory pressure critical: available RAM < 120MB.
+[2026-09-30 03:20:01.120] [WARN] [POS-Shell] UI render thread delayed by 4,120ms (PageFault thrashing).`
   }
 ];
 
@@ -690,7 +634,7 @@ export function generateRandomIncident() {
   const template = mockIncidentTickets[Math.floor(Math.random() * mockIncidentTickets.length)];
   const store = STORE_LOCATIONS[Math.floor(Math.random() * STORE_LOCATIONS.length)];
   const randomNum = Math.floor(10000 + Math.random() * 90000);
-  const laneNum = Math.floor(1 + Math.random() * 12);
+  const laneNum = Math.floor(1 + Math.random() * 8);
 
   return {
     ...template,
@@ -698,14 +642,13 @@ export function generateRandomIncident() {
     storeId: store.storeId,
     storeName: store.storeName,
     city: store.city,
-    terminalId: `REG-${randomNum.toString().slice(-3)}-0${laneNum}`,
+    terminalId: template.envType === 'sql' ? `SRV-${randomNum.toString().slice(-3)}-DB` : `REG-${randomNum.toString().slice(-3)}-0${laneNum}`,
     openedAt: "Just now (Live Escalation)",
     status: "OPEN",
     remainingSeconds: template.slaMinutes * 60,
     slaBreached: false,
     runDiagnostics: [],
-    resolutionApplied: null,
-    escalationSubmitted: null
+    userCode: template.starterCode || '',
+    executionResult: null
   };
 }
-

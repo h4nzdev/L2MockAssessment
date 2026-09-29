@@ -253,20 +253,20 @@ export const posDocumentation = {
       sqlCheck: "SELECT * FROM ErrorLogs WHERE error_code = 'ERR_DB_LOCK' ORDER BY occurred_at DESC;"
     },
     {
-      code: 'ERR_NETWORK_DISCONNECTED',
+      code: 'ERR_SOCKET_TIMEOUT',
       severity: 'CRITICAL',
-      title: 'Ethernet NIC Link Down',
-      description: 'The physical network cable was unplugged or the store switch port flapped down.',
-      procedure: '1. Check physical Cat6 patch cable from POS terminal to register jack. 2. Verify link lights on switch. 3. Test ping to default gateway.',
+      title: 'TCP Socket Timeout on Local Store API',
+      description: 'The POS terminal lost TCP connection to the in-store controller server on port 8080.',
+      procedure: '1. Test TCP connection: Test-NetConnection -Port 8080. 2. Verify local DNS/hosts mapping. 3. Restart POS network daemon.',
       sqlCheck: "SELECT register_id, store_id, terminal_number FROM Registers WHERE is_online = 0;"
     },
     {
-      code: 'ERR_DRAWER_JAM',
+      code: 'ERR_PROMO_SYNC_FAIL',
       severity: 'WARN',
-      title: 'Cash Drawer Solenoid Kick Sensor Error',
-      description: 'Cash drawer solenoid kick sensor did not receive microswitch feedback signal after tendering cash.',
-      procedure: '1. Check physical key lock position (must be vertical). 2. Verify RJ12 cable between receipt printer kick-out port and drawer solenoid.',
-      sqlCheck: "SELECT * FROM ErrorLogs WHERE error_code = 'ERR_DRAWER_JAM' ORDER BY occurred_at DESC;"
+      title: 'Promotional Engine Pricing Deserialization Fault',
+      description: 'Local promotion JSON campaign cache is corrupt or contains syntax errors.',
+      procedure: '1. Query ErrorLogs for ERR_PROMO_SYNC_FAIL. 2. Purge local promotion cache and force re-sync from CloudHQ API.',
+      sqlCheck: "SELECT * FROM ErrorLogs WHERE error_code = 'ERR_PROMO_SYNC_FAIL' ORDER BY occurred_at DESC;"
     },
     {
       code: 'ERR_AUTH_EXPIRED',
@@ -277,12 +277,12 @@ export const posDocumentation = {
       sqlCheck: "SELECT * FROM ErrorLogs WHERE error_code = 'ERR_AUTH_EXPIRED';"
     },
     {
-      code: 'ERR_PRINTER_OFFLINE',
+      code: 'ERR_SPOOLER_DEADLOCK',
       severity: 'INFO',
-      title: 'Thermal Receipt Printer Offline / Paper Out',
-      description: 'Thermal receipt printer paper is exhausted, cover is unlatched, or USB link dropped.',
-      procedure: '1. Replace 80mm thermal paper roll with thermal coating facing sensor. 2. Power cycle printer and verify Windows spooler service.',
-      sqlCheck: "SELECT * FROM ErrorLogs WHERE error_code = 'ERR_PRINTER_OFFLINE' ORDER BY occurred_at DESC;"
+      title: 'Windows Print Spooler Service Deadlock',
+      description: 'Windows Print Spooler service hung due to corrupt RPC buffer files in C:\\Windows\\System32\\spool\\PRINTERS.',
+      procedure: '1. Stop-Process spoolsv.exe. 2. Delete corrupt .SHD/.SPL lockfiles. 3. Restart-Service -Name Spooler -Force.',
+      sqlCheck: "SELECT * FROM ErrorLogs WHERE error_code = 'ERR_SPOOLER_DEADLOCK' ORDER BY occurred_at DESC;"
     },
     {
       code: 'ERR_BARCODE_NOT_FOUND',
@@ -304,16 +304,16 @@ export const posDocumentation = {
 
   architectureLayers: [
     { 
-      layer: 'L1: Terminal Lane Fleet', 
-      components: 'Hardware: Verifone M400, NCR RealPOS 70, Ingenico Lane 5000, Toshiba TCxWave. Peripherals: thermal printer, APG cash drawer, Honeywell 2D barcode scanner. OS: Windows 10 IoT / Ubuntu POS 22.04 with local SQLite.' 
+      layer: 'L1: POS Client Software & Local DB Cache', 
+      components: 'Windows 10 IoT / Ubuntu POS Client Runtime with in-memory SQLite3 WAL cache, POS Client UI runtime, and local EFT Payment bridge service.' 
     },
     { 
-      layer: 'L2: In-Store Controller', 
-      components: 'Linux / Windows Store Controller Server (Stores.server_ip 10.x.0.5) hosting local SQL transaction database, batch aggregator, and NTP sync.' 
+      layer: 'L2: In-Store Controller Server', 
+      components: 'Linux/Windows Store Controller hosting local MySQL/SQLite relational database, RabbitMQ message broker, batch sync worker daemon, and local API gateway.' 
     },
     { 
-      layer: 'L3: Enterprise Core & Gateway', 
-      components: 'Payment Acquirer Gateway (First Data / Chase Paymentech), Corporate Inventory SAP, Central Data Warehouse, NOC Datadog Monitoring.' 
+      layer: 'L3: Enterprise Core & Cloud Microservices', 
+      components: 'Payment Acquirer Gateway REST APIs, CloudHQ AMQP message consumer clusters, Corporate ERP SAP integration, Central Data Warehouse, Datadog Monitoring.' 
     }
   ],
 
@@ -325,8 +325,8 @@ export const posDocumentation = {
       steps: [
         '1. Check Stores table for server_status = "OFFLINE" and review last_heartbeat timestamp.',
         '2. Verify register lanes at this store (Registers WHERE store_id = X) are running in offline buffer mode.',
-        '3. Ping server_ip directly. If unreachable, engage On-Site Manager to verify server rack UPS power and LEDs.',
-        '4. Once server boots, verify MySQL/SQLite service and ensure `pos-sync` daemon starts receiving buffered transactions.'
+        '3. Test ping and TCP port 8080 to server_ip.',
+        '4. Once server service restarts, verify MySQL/SQLite service and ensure `pos-sync` daemon starts receiving buffered transactions.'
       ]
     },
     {
@@ -350,33 +350,6 @@ export const posDocumentation = {
         '3. If failure rate > 50% across multiple stores, escalate to Tier 3 / Merchant Gateway provider status page.',
         '4. Instruct store cashiers to route transactions through secondary PIN pads or switch to debit/cash.'
       ]
-    }
-  ],
-
-  terminalModels: [
-    {
-      model: 'Verifone M400',
-      os: 'Windows 10 IoT Enterprise',
-      defaultPort: 'TCP 8443',
-      notes: 'Touchscreen multilane terminal with EMV contact/contactless reader. Requires static IP in VLAN 20.'
-    },
-    {
-      model: 'NCR RealPOS 70',
-      os: 'Ubuntu POS 22.04 LTS',
-      defaultPort: 'TCP 9000',
-      notes: 'Modular high-throughput terminal. Uses SQLite3 WAL mode for local offline transaction caching.'
-    },
-    {
-      model: 'Ingenico Lane 5000',
-      os: 'Windows 10 IoT Enterprise',
-      defaultPort: 'TCP 5015',
-      notes: 'Compact customer-facing terminal. Communicates with store controller via proprietary Telium protocol.'
-    },
-    {
-      model: 'Toshiba TCxWave',
-      os: 'Windows 10 IoT Enterprise',
-      defaultPort: 'TCP 8080',
-      notes: 'All-in-one flagship terminal with integrated magnetic swipe and biometric clerk login.'
     }
   ]
 };

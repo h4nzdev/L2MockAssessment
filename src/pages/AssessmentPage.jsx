@@ -128,20 +128,6 @@ function getRelatedDocumentation(question) {
     };
   }
 
-  // 3. Hardware model check (e.g. NCR RealPOS 70, Verifone M400, Ingenico Lane 5000)
-  const matchedModel = (posDocumentation.terminalModels || []).find(m => {
-    return text.includes(m.model.toLowerCase());
-  });
-
-  if (matchedModel) {
-    return {
-      type: 'model',
-      code: matchedModel.model,
-      title: matchedModel.model,
-      label: `Runbook: ${matchedModel.model}`
-    };
-  }
-
   return null;
 }
 

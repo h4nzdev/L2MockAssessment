@@ -189,19 +189,7 @@ export default function DocumentationPage() {
             }`}
           >
             <Network className="w-4 h-4 text-current dark:text-sky-400" />
-            <span>POS Architecture &amp; Subnets</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("fleet")}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border transition-all ${
-              activeTab === "fleet"
-                ? "bg-blue-600 text-white border-blue-500 shadow-md font-semibold dark:bg-blue-900/70 dark:text-sky-200 dark:border-blue-600"
-                : "bg-[var(--bg-card)] border-[var(--border-base)] theme-text-muted hover:theme-text-sec hover:bg-[var(--bg-surface2)]"
-            }`}
-          >
-            <Cpu className="w-4 h-4 text-current dark:text-sky-400" />
-            <span>Hardware Terminal Fleet</span>
+            <span>POS Software Architecture &amp; Subnets</span>
           </button>
 
           <button
@@ -213,7 +201,7 @@ export default function DocumentationPage() {
             }`}
           >
             <FileText className="w-4 h-4 text-current dark:text-sky-400" />
-            <span>Standard Operating Procedures</span>
+            <span>Standard Operating Procedures (SOP)</span>
           </button>
 
           <button
@@ -463,55 +451,7 @@ export default function DocumentationPage() {
           </div>
         )}
 
-        {/* TAB 3: Hardware Terminal Fleet */}
-        {activeTab === "fleet" && (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-xl font-bold text-white tracking-tight">
-                Store Terminal Hardware Fleet Reference
-              </h2>
-              <p className="text-sm text-slate-400 mt-1">
-                Hardware specifications, operating systems, default
-                communication ports, and diagnostic procedures for each terminal
-                type.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {posDocumentation.terminalModels?.map((item, idx) => (
-                <div
-                  key={idx}
-                  className="p-6 sm:p-7 rounded-2xl border border-blue-900/50 bg-slate-900/60 shadow-xl space-y-4"
-                >
-                  <div className="flex items-center justify-between pb-3 border-b border-blue-950">
-                    <h3 className="font-bold text-white text-base flex items-center gap-2">
-                      <Cpu className="w-4 h-4 text-sky-400" />
-                      {item.model}
-                    </h3>
-                    <span className="px-2.5 py-1 rounded-md bg-blue-950 text-sky-300 font-mono text-xs border border-blue-800">
-                      {item.defaultPort}
-                    </span>
-                  </div>
-
-                  <div className="space-y-2 text-xs font-mono">
-                    <div className="text-slate-400">
-                      OS Platform:{" "}
-                      <span className="text-slate-100 font-semibold">
-                        {item.os}
-                      </span>
-                    </div>
-                  </div>
-
-                  <p className="text-sm text-slate-300 leading-relaxed">
-                    {item.notes}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* TAB 4: Standard Operating Procedures (SOP) */}
+        {/* TAB 3: Standard Operating Procedures (SOP) */}
         {activeTab === "sop" && (
           <div className="space-y-6">
             <div>
