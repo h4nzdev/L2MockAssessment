@@ -157,13 +157,50 @@ export default function SimulatorPage() {
     setTimeout(() => setCopiedLog(false), 2000);
   };
 
-  // Sync editor with active ticket
+  // Sync editor with active ticket & broadcast AI context
   useEffect(() => {
     if (activeTicket) {
       setCurrentCode(activeTicket.userCode || activeTicket.starterCode || '');
       setShowHint(false);
+
+      // Broadcast active incident context to Global AI Chatbot
+      window.dispatchEvent(
+        new CustomEvent('ssequel:set-ai-context', {
+          detail: {
+            source: 'Simulator Active Incident',
+            title: `${activeTicket.id}: ${activeTicket.title}`,
+            ticketId: activeTicket.id,
+            category: activeTicket.category,
+            scenario: activeTicket.incidentNarrative || activeTicket.customerStatement,
+            objective: activeTicket.incidentObjective,
+            affectedHost: activeTicket.affectedHost,
+            affectedService: activeTicket.affectedService,
+            logs: activeTicket.terminalLogs
+          }
+        })
+      );
     }
   }, [selectedTicketId]);
+
+  const handleOpenAiMentorForIncident = () => {
+    if (!activeTicket) return;
+    window.dispatchEvent(
+      new CustomEvent('ssequel:set-ai-context', {
+        detail: {
+          autoOpen: true,
+          source: 'Simulator Active Incident',
+          title: `${activeTicket.id}: ${activeTicket.title}`,
+          ticketId: activeTicket.id,
+          category: activeTicket.category,
+          scenario: activeTicket.incidentNarrative || activeTicket.customerStatement,
+          objective: activeTicket.incidentObjective,
+          affectedHost: activeTicket.affectedHost,
+          affectedService: activeTicket.affectedService,
+          logs: activeTicket.terminalLogs
+        }
+      })
+    );
+  };
 
   // Audio synthesizer tone for incoming tickets (Web Audio API)
   const playIncidentAlertBeep = () => {
@@ -1062,8 +1099,16 @@ export default function SimulatorPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-4 text-xs font-mono">
-                <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-3 text-xs font-mono flex-wrap justify-end">
+                <button
+                  onClick={handleOpenAiMentorForIncident}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-blue-600/30 via-indigo-600/30 to-purple-600/30 hover:from-blue-600/40 hover:to-purple-600/40 border border-blue-500/50 text-sky-300 font-bold transition-all active:scale-95 shadow-sm cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+                  <span>Ask AI Mentor</span>
+                </button>
+
+                <div className="flex items-center gap-1.5 pl-2 border-l theme-border-m">
                   <span className="text-slate-400">SLA Clock:</span>
                   <span className={`font-bold ${
                     activeTicket.status === 'RESOLVED' ? 'text-emerald-400' :

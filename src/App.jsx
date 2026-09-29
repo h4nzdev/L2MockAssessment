@@ -5,6 +5,7 @@ import AssessmentPage from './pages/AssessmentPage';
 import DocumentationPage from './pages/DocumentationPage';
 import CustomBuilderPage from './pages/CustomBuilderPage';
 import SimulatorPage from './pages/SimulatorPage';
+import GlobalAiChatbot from './components/GlobalAiChatbot';
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
           <Route path="/custom-builder" element={<Navigate to="/builder" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        <GlobalAiChatbot />
       </BrowserRouter>
     </ThemeProvider>
   );

@@ -875,6 +875,18 @@ export default function CustomBuilderPage() {
                   <span>{showKey ? "Hide" : "Show"}</span>
                 </button>
               </div>
+
+              {/* Privacy Policy Guarantee Banner */}
+              <div className="p-3 rounded-xl bg-emerald-950/20 border border-emerald-500/30 text-xs text-emerald-300 space-y-1">
+                <div className="flex items-center gap-1.5 font-bold font-mono text-[11px]">
+                  <Lock className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Privacy Policy &amp; Security Guarantee</span>
+                </div>
+                <p className="text-slate-300 text-[11px] leading-relaxed">
+                  Your Gemini API key is stored <strong>exclusively in your browser's local storage (`localStorage`)</strong>. It is never uploaded to any third-party server or backend database. Requests communicate directly with Google's official Gemini API.
+                </p>
+              </div>
+
               {isSavedKey && (
                 <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-mono">
                   ✓ Active API Key securely stored in browser localStorage

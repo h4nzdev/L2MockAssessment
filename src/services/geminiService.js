@@ -200,3 +200,93 @@ Return ONLY a JSON object:
   const cleanJson = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
   return JSON.parse(cleanJson);
 }
+
+/**
+ * Multi-turn Socratic AI Mentor Chat
+ * Strictly guides the user without revealing full SQL queries or solutions.
+ */
+export async function chatWithGeminiMentor({
+  apiKey,
+  messages = [],
+  problemContext = null
+}) {
+  if (!apiKey) {
+    throw new Error('Please configure a Google Gemini API Key first.');
+  }
+
+  const systemInstruction = `You are "SSEQUEL AI Mentor", an expert Level 2/Level 3 Technical Support Lead and Socratic Mentor for SQL databases, Windows PowerShell system automation, and POS software troubleshooting.
+
+CORE BEHAVIOR RULES (CRITICAL):
+1. GUIDANCE ONLY: You must NEVER output full, complete SQL queries, complete PowerShell scripts, or direct copy-paste solutions.
+2. If the user asks for the answer or full query (e.g. "give me the SQL query", "what is the answer", "write the solution for me"), politely decline giving the direct query and instead guide them conceptually.
+3. EXPLAIN IN SIMPLE TERMS: Break down enterprise IT jargon, error codes (like SQLITE_BUSY, RPC 0x800706BA, socket timeouts, deadlocks), and database issues using clear, everyday analogies.
+4. REVIEWING USER CODE: If the user provides their draft query/cmdlet or asks "is this query correct?", inspect it and point out conceptual flaws, missing clauses, or mismatched column filters without writing the corrected query for them (e.g., "Take a look at your WHERE clause: what status value does the sync daemon look for? What condition is needed for store_id?").
+5. STEP-BY-STEP BREAKDOWN: Give high-level steps (e.g. "Step 1: Identify target table; Step 2: Determine which column to modify; Step 3: Filter only the affected store").
+6. Keep your responses concise, friendly, encouraging, and well-formatted with markdown bullet points and short keywords in backticks.
+
+${problemContext ? `CURRENT PROBLEM CONTEXT ACTIVE ON USER'S SCREEN:
+${typeof problemContext === 'string' ? problemContext : JSON.stringify(problemContext, null, 2)}
+` : ''}`;
+
+  const contents = [
+    {
+      role: 'user',
+      parts: [{ text: systemInstruction }]
+    },
+    {
+      role: 'model',
+      parts: [{ text: "Understood. I am SSEQUEL AI Mentor. I am here to explain problems in simple terms, troubleshoot error messages, and review your draft queries step-by-step WITHOUT giving away full SQL queries or direct solutions. How can I help you with your current task?" }]
+    }
+  ];
+
+  // Add conversation history
+  messages.forEach(msg => {
+    contents.push({
+      role: msg.role === 'user' ? 'user' : 'model',
+      parts: [{ text: msg.content }]
+    });
+  });
+
+  const models = ['gemini-2.5-flash', 'gemini-1.5-flash'];
+  let lastError = null;
+
+  for (const model of models) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey.trim()}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents,
+            generationConfig: {
+              temperature: 0.5,
+              maxOutputTokens: 1000
+            }
+          })
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const message = errorData?.error?.message || `HTTP ${response.status}: ${response.statusText}`;
+        throw new Error(message);
+      }
+
+      const data = await response.json();
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) {
+        throw new Error('Gemini API returned an empty response.');
+      }
+      return text;
+    } catch (err) {
+      lastError = err;
+      if (err.message && err.message.includes('not found')) {
+        continue;
+      }
+      break;
+    }
+  }
+
+  throw lastError || new Error('Failed to communicate with Gemini API.');
+}
